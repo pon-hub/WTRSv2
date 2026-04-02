@@ -4,6 +4,14 @@ require_once __DIR__ . '/../includes/session.php';
 $error = null;
 $success = null;
 
+// ── Live Stats ────────────────────────────────────────────────────────────────
+$researcherCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active'")->fetchColumn();
+function fmt_reg_stat(int $n): string {
+    if ($n >= 1000) return number_format(round($n / 1000, 1)) . 'k+';
+    return $n > 0 ? $n . '+' : '0';
+}
+
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $first_name = trim($_POST['first_name'] ?? '');
     $last_name = trim($_POST['last_name'] ?? '');
@@ -55,13 +63,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link rel="stylesheet" href="../assets/css/global.css">
   <link rel="stylesheet" href="../assets/css/login.css">
   <link rel="stylesheet" href="../assets/css/register.css">
+  <style>
+    /* Register-specific overrides — inline for maximum specificity */
+    html, body { overflow: visible !important; }
+    .auth-page { overflow: visible !important; }
+    .auth-left.auth-left-register { overflow: visible !important; }
+    .auth-right { overflow-y: auto !important; }
+  </style>
 </head>
 <body class="auth-page">
 
   <!-- Left Side: Branding & Info -->
-  <div class="auth-left auth-left-register" style="padding: 3rem 4rem;">
-    <div class="auth-brand" style="margin-bottom: 3rem;">
-      <div class="brand-seal-box" style="width: 72px; height: 72px; overflow: hidden; border-radius: 12px;">
+  <div class="auth-left auth-left-register" style="padding: 2rem 3rem;">
+    <div class="auth-brand" style="margin-bottom: 1rem;">
+      <div class="brand-seal-box" style="width: 60px; height: 60px; overflow: hidden; border-radius: 12px;">
         <img src="../assets/images/wmsu-logo.png" alt="WMSU Logo" style="width: 100%; height: 100%; object-fit: contain;" />
       </div>
       <div class="brand-text">
@@ -70,35 +85,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
     </div>
 
-    <div class="auth-hero-text" style="margin-top: 2rem;">
-      <h1 style="font-size: 3.5rem;">WMSU<br><span class="gold-text">Repository</span></h1>
-      <p style="font-size: 1rem; margin-bottom: 2rem;">Preserving institutional wisdom through a premium digital archive of undergraduate and graduate research.</p>
+    <div class="auth-hero-text" style="margin-top: 0.75rem;">
+      <h1 style="font-size: 2.6rem; margin-bottom: 0.5rem;">WMSU<br><span class="gold-text">Repository</span></h1>
+      <p style="font-size: 0.9rem; margin-bottom: 0; line-height: 1.6;">Preserving institutional wisdom through a premium digital archive of undergraduate and graduate research.</p>
     </div>
 
     <div class="auth-info-card">
       <div class="aic-header">
         <i class="ph-fill ph-shield-check"></i> INSTITUTIONAL ACCESS
       </div>
-      <p>Join the community of researchers and scholars. Please note that all accounts require verification from an authorized Faculty Adviser before full access is granted.</p>
+      <p>Join the community of researchers and scholars. All accounts require verification from an authorized Faculty Adviser before access is granted.</p>
     </div>
 
-    <div class="avatar-stack-wrap" style="margin-top: auto;">
+    <div class="avatar-stack-wrap" style="margin-top: auto; padding-top: 1.5rem;">
       <div class="avatar-stack">
-        <img src="https://via.placeholder.com/40">
-        <img src="https://via.placeholder.com/40">
-        <img src="https://via.placeholder.com/40">
+        <div style="width:36px;height:36px;border-radius:50%;background:#A00000;color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.8rem;border:2px solid #6B0000;">MR</div>
+        <div style="width:36px;height:36px;border-radius:50%;background:#7A0000;color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.8rem;border:2px solid #6B0000;margin-left:-10px;">JD</div>
+        <div style="width:36px;height:36px;border-radius:50%;background:#C8952A;color:white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.8rem;border:2px solid #6B0000;margin-left:-10px;">AL</div>
       </div>
       <div class="avatar-stack-text">
-        JOINED BY 2,400+<br>RESEARCHERS
+        JOINED BY <?= fmt_reg_stat($researcherCount) ?><br>RESEARCHERS
       </div>
     </div>
   </div>
 
   <!-- Right Side: Register Form -->
-  <div class="auth-right" style="justify-content: flex-start; padding-left: 6%;">
-    <div class="auth-form-wrapper" style="max-width: 650px;">
-      <h2 style="font-size: 2rem;">Create your account</h2>
-      <p style="margin-bottom: 3rem;">Begin your journey into the WMSU digital archives.</p>
+  <div class="auth-right" style="justify-content: flex-start; align-items: flex-start; padding: 3rem 5% 3rem 6%; overflow-y: auto;">
+    <div class="auth-form-wrapper" style="max-width: 620px; width: 100%;">
+      <h2 style="font-size: 1.8rem;">Create your account</h2>
+      <p style="margin-bottom: 2rem;">Begin your journey into the WMSU digital archives.</p>
 
       <?php if ($error): ?>
         <div class="alert alert-error" style="margin-bottom: 1rem; color: #B91C1C;"><?= htmlspecialchars($error) ?></div>
@@ -166,12 +181,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
       </form>
 
-      <div class="bottom-legal-links">
-        <a href="<?= BASE_URL ?>public/guidelines.php">GUIDELINES</a>
-        <a href="#">PRIVACY POLICY</a>
-        <a href="<?= BASE_URL ?>public/about.php">SUPPORT CENTER</a>
-      </div>
+    </div><!-- /.auth-form-wrapper -->
+
+    <div class="bottom-legal-links" style="background: transparent; border-top: none; margin-top: 1.5rem; padding-top: 0;">
+      <a href="<?= BASE_URL ?>public/guidelines.php">GUIDELINES</a>
+      <a href="#">PRIVACY POLICY</a>
+      <a href="<?= BASE_URL ?>public/about.php">SUPPORT CENTER</a>
     </div>
+
   </div>
 </body>
 </html>
