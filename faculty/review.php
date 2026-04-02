@@ -64,8 +64,8 @@ if ($thesis_id) {
                     ->execute([$user['id'], $logMsg, $_SERVER['REMOTE_ADDR']]);
 
                 $pdo->commit();
-                $success = "Review finalized successfully. Notification dispatched to student.";
-                
+                $success = "Review processed successfully.";
+
                 // Update local vars for immediate UI reflection
                 $thesis['status'] = $action;
                 $latestVersion['status'] = $versionStatus;
@@ -81,29 +81,123 @@ if ($thesis_id) {
     ob_start();
 ?>
 <style>
-  .review-layout { display: grid; grid-template-columns: 2.2fr 1fr; gap: 2.5rem; }
+  /* ---------------------------------------------------------
+     ACADEMIC WORKSPACE LAYOUT (Crimsonian Pro)
+     --------------------------------------------------------- */
+  .workspace-container {
+    display: flex;
+    gap: 0;
+    height: calc(100vh - var(--topbar-h));
+    margin: calc(var(--topbar-h) * -1) -2.5rem 0; /* Negate main-content padding to go edge-to-edge */
+    overflow: hidden;
+  }
+
+  /* Manuscript Side */
+  .manuscript-viewport {
+    flex: 1;
+    background: #525659; /* Standard PDF viewer background */
+    padding: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
   
-  .review-master-card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 3rem; margin-bottom: 2rem; box-shadow: var(--shadow-sm); position: relative; }
-  .status-tag-floating { position: absolute; top: 2rem; right: 2rem; }
+  .manuscript-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+  }
 
-  .review-header { border-bottom: 2px solid var(--off-white); padding-bottom: 2rem; margin-bottom: 2.5rem; }
-  .review-code { color: var(--gold); font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 1rem; display: block; }
-  .review-title { font-family: var(--font-serif); font-size: 2.2rem; color: var(--text-dark); line-height: 1.25; }
-
-  .author-strip { background: var(--off-white); padding: 1.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border); display: flex; align-items: center; gap: 1.25rem; margin-bottom: 3rem; }
-  .av-box { width: 50px; height: 50px; background: var(--crimson); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.25rem; }
-
-  .abstract-display { font-family: 'Georgia', serif; font-size: 1.15rem; line-height: 1.8; color: var(--text-dark); border-left: 3px solid var(--gold); padding-left: 2rem; margin: 2rem 0 4rem; text-align: justify; }
+  .manuscript-frame {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #E5E7EB;
+  }
 
   /* Evaluation Sidebar */
-  .evaluation-sidebar { position: sticky; top: 2rem; }
-  .eval-card { background: white; border-radius: var(--radius); border: 1px solid var(--border); padding: 2.5rem; box-shadow: var(--shadow-md); }
-  .eval-header { display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; color: var(--crimson); }
-  .eval-header h3 { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 800; color: var(--text-dark); margin: 0; }
+  .evaluation-sidebar {
+    width: 440px;
+    background: var(--surface);
+    border-left: 2px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.05);
+  }
 
-  .version-history-item { border-left: 2px dashed var(--border); padding-left: 2.5rem; position: relative; padding-bottom: 2.5rem; }
-  .version-history-item::before { content: ''; position: absolute; left: -7px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: white; border: 2px solid var(--border-strong); }
-  .version-history-item.active::before { border-color: var(--crimson); background: var(--crimson); }
+  .sidebar-section {
+    padding: 2.5rem;
+    border-bottom: 1px solid var(--border-faint);
+  }
+
+  .scholarly-header {
+    border-bottom: 3px double var(--gold-faint);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .scholarly-title {
+    font-family: var(--font-serif);
+    font-size: 1.5rem;
+    line-height: 1.3;
+    color: var(--crimson);
+    margin: 0.5rem 0;
+  }
+  
+  .author-badge {
+    background: var(--off-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .sidebar-form-card {
+    background: var(--off-white);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 1.75rem;
+    margin-top: 1rem;
+  }
+
+  /* Version Switcher Navigation */
+  .version-nav {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+  .v-pill {
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-decoration: none;
+    background: white;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .v-pill.active {
+    background: var(--crimson);
+    color: white;
+    border-color: var(--crimson);
+  }
+
+  /* Hide global main-content padding for workspace */
+  .main-content:has(.workspace-container) {
+    padding: 0 !important;
+    overflow: hidden;
+  }
 </style>
 <?php
     $extraCss = ob_get_clean();
@@ -112,139 +206,144 @@ if ($thesis_id) {
 ?>
 
   <main class="main-content">
-    
-    <nav style="margin-bottom: 2.5rem; font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
-       <a href="<?= BASE_URL ?>faculty/index.php" style="color:var(--text-muted); text-decoration:none;">DASHBOARD</a>
-       <i class="ph ph-caret-right" style="margin: 0 0.5rem; opacity:0.5;"></i>
-       <a href="<?= BASE_URL ?>faculty/review.php" style="color:var(--text-muted); text-decoration:none;">REVIEW QUEUE</a>
-       <i class="ph ph-caret-right" style="margin: 0 0.5rem; opacity:0.5;"></i>
-       <span style="color:var(--crimson);">THESIS EVALUATION</span>
-    </nav>
 
     <?php if ($error): ?>
-      <div style="margin-bottom:2.5rem; padding:1.25rem 2rem; background:#991B1B; color:white; border-radius:var(--radius-sm); font-weight:700; box-shadow:var(--shadow-md);">
+      <div style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%); z-index: 100; width: 80%; padding: 1rem; background: #991B1B; color: white; border-radius: var(--radius-sm); font-weight: 700; box-shadow: var(--shadow-lg);">
         <i class="ph-bold ph-warning-circle" style="margin-right:0.75rem;"></i> <?= htmlspecialchars($error) ?>
       </div>
     <?php endif; ?>
 
     <?php if ($success): ?>
-      <div style="margin-bottom:2.5rem; padding:1.25rem 2rem; background:#065F46; color:white; border-radius:var(--radius-sm); font-weight:700; box-shadow:var(--shadow-md);">
+      <div style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%); z-index: 100; width: 80%; padding: 1rem; background: #065F46; color: white; border-radius: var(--radius-sm); font-weight: 700; box-shadow: var(--shadow-lg);">
         <i class="ph-bold ph-check-circle" style="margin-right:0.75rem;"></i> <?= htmlspecialchars($success) ?>
       </div>
     <?php endif; ?>
 
-    <div class="review-layout">
-      <!-- MAIN AREA -->
-      <div>
-        <section class="review-master-card">
-          <div class="status-tag-floating">
-            <?php if ($thesis['status'] === 'pending_review'): ?>
-              <span class="badge badge-pending" style="padding: 0.5rem 1rem; border-radius: 20px; font-weight: 800; font-size: 0.75rem;"><span class="dot dot-pending"></span> AWAITING REVIEW</span>
-            <?php elseif ($thesis['status'] === 'approved'): ?>
-              <span class="badge badge-approved" style="padding: 0.5rem 1rem; border-radius: 20px; font-weight: 800; font-size: 0.75rem;"><span class="dot dot-approved"></span> VERIFIED & ARCHIVED</span>
-            <?php else: ?>
-              <span class="badge badge-default" style="padding: 0.5rem 1rem; border-radius: 20px; font-weight: 800; font-size: 0.75rem;"><?= strtoupper(str_replace('_', ' ', $thesis['status'])) ?></span>
-            <?php endif; ?>
-          </div>
+    <div class="workspace-container">
+      
+      <!-- 📄 MANUSCRIPT VIEWPORT -->
+      <section class="manuscript-viewport">
+        <div class="manuscript-header">
+           <div>
+              <span class="badge badge-pending" style="font-size: 0.6rem; letter-spacing: 0.1em; padding: 0.25rem 0.6rem;">
+                ITERATION <?= $latestVersion['version_number'] ?>
+              </span>
+              <h2 style="font-size: 1rem; margin: 0.4rem 0 0; color: var(--text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px;">
+                <?= htmlspecialchars($thesis['title']) ?>
+              </h2>
+           </div>
+           <div style="display: flex; gap: 0.75rem;">
+              <a href="<?= BASE_URL ?>public/uploads/<?= htmlspecialchars($latestVersion['file_path']) ?>" target="_blank" class="btn btn-secondary" style="padding: 0.5rem 1rem;">
+                <i class="ph ph-arrow-square-out"></i> External View
+              </a>
+              <button onclick="document.querySelector('.manuscript-frame').requestFullscreen()" class="btn btn-primary" style="padding: 0.5rem 1rem; background: var(--text-dark);">
+                <i class="ph ph-corners-out"></i> Full Screen
+              </button>
+           </div>
+        </div>
 
-          <div class="review-header">
-             <span class="review-code"><?= htmlspecialchars($thesis['thesis_code']) ?></span>
-             <h1 class="review-title"><?= htmlspecialchars($thesis['title']) ?></h1>
-          </div>
-
-          <div class="author-strip">
-             <div class="av-box"><?= htmlspecialchars(strtoupper(substr($thesis['first_name'], 0, 1) . substr($thesis['last_name'], 0, 1))) ?></div>
-             <div>
-                <div style="font-weight: 800; color: var(--text-dark);"><?= htmlspecialchars($thesis['first_name'] . ' ' . $thesis['last_name']) ?></div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;"><?= htmlspecialchars($thesis['college']) ?> &bull; Student Submitter</div>
+        <?php if ($latestVersion): ?>
+          <iframe 
+            src="<?= BASE_URL ?>public/uploads/<?= htmlspecialchars($latestVersion['file_path']) ?>#toolbar=0" 
+            class="manuscript-frame"
+            title="Manuscript Viewer"
+          ></iframe>
+        <?php else: ?>
+          <div style="flex:1; display:flex; align-items:center; justify-content:center; color:white; background:#1A1108;">
+             <div style="text-align:center;">
+                <i class="ph ph-file-x" style="font-size:4rem; opacity:0.3;"></i>
+                <p style="margin-top:1rem;">No valid manuscript submission found for this repository artifact.</p>
              </div>
           </div>
+        <?php endif; ?>
+      </section>
 
-          <h4 style="font-size: 0.7rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 1.5rem;">Intention & Abstract</h4>
-          <div class="abstract-display"><?= nl2br(htmlspecialchars($thesis['abstract'])) ?></div>
-
-          <h4 style="font-size: 0.75rem; font-weight: 800; color: var(--text-dark); border-bottom: 2px solid var(--off-white); padding-bottom: 1rem; margin-bottom: 2.5rem;">MANUSCRIPT ITERATIONS</h4>
-          
-          <div style="margin-left: 1rem;">
-            <?php foreach ($versions as $index => $v): ?>
-               <div class="version-history-item <?= $index === 0 ? 'active' : '' ?>">
-                  <div style="background: var(--off-white); border: 1px solid var(--border); padding: 1.5rem; border-radius: var(--radius-sm); display: flex; justify-content: space-between; align-items: center;">
-                     <div>
-                        <div style="font-weight: 800; color: var(--text-dark);">Version <?= htmlspecialchars($v['version_number']) ?></div>
-                        <div style="font-size: 0.8rem; color: var(--text-muted);">Submitted on <?= date('F j, Y \a\t h:i A', strtotime($v['submitted_at'])) ?></div>
-                     </div>
-                     <div style="display: flex; gap: 1rem; align-items: center;">
-                        <?php if ($v['status'] === 'approved'): ?>
-                           <span style="font-size: 0.65rem; font-weight: 800; color: #059669; letter-spacing: 0.1em;">APPROVED</span>
-                        <?php elseif ($v['status'] === 'rejected'): ?>
-                           <span style="font-size: 0.65rem; font-weight: 800; color: #DC2626; letter-spacing: 0.1em;">REJECTED</span>
-                        <?php else: ?>
-                           <span style="font-size: 0.65rem; font-weight: 800; color: var(--gold); letter-spacing: 0.1em;">PENDING</span>
-                        <?php endif; ?>
-                        <a href="<?= BASE_URL ?>public/uploads/<?= htmlspecialchars($v['file_path']) ?>" target="_blank" class="btn-action-outline" style="padding: 0.5rem 1.25rem; font-weight: 800; text-decoration: none; display: flex; align-items: center; gap: 0.4rem; color: var(--crimson); border-color: var(--crimson);">
-                           <i class="ph-bold ph-eye"></i> View
-                        </a>
-                     </div>
-                  </div>
-                  <?php if (!empty($v['feedback'])): ?>
-                    <div style="margin-top: 1rem; background: white; padding: 1.25rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: 'Georgia', serif; font-size: 0.95rem; color: var(--text-dark); line-height: 1.6; border-left: 4px solid var(--border-strong);">
-                       "<?= nl2br(htmlspecialchars($v['feedback'])) ?>"
-                    </div>
-                  <?php endif; ?>
-               </div>
-            <?php endforeach; ?>
-          </div>
-        </section>
-      </div>
-
-      <!-- SIDEBAR EVALUATION -->
+      <!-- 🖋️ EVALUATION SIDEBAR -->
       <aside class="evaluation-sidebar">
-         <div class="eval-card">
-            <div class="eval-header">
-               <i class="ph-fill ph-shield-check"></i>
-               <h3>Academic Evaluation</h3>
+         
+         <div class="sidebar-section">
+            <nav style="margin-bottom: 2rem; font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">
+               <a href="<?= BASE_URL ?>faculty/review.php" style="color:var(--text-muted);">Review Queue</a>
+               <i class="ph ph-caret-right" style="margin: 0 0.4rem; opacity:0.5;"></i>
+               <span style="color:var(--crimson);">Workspace</span>
+            </nav>
+
+            <div class="scholarly-header">
+               <span style="font-size: 0.65rem; font-weight: 800; color: var(--gold); letter-spacing: 0.2em; text-transform: uppercase;">Repository Artifact</span>
+               <h1 class="scholarly-title"><?= htmlspecialchars($thesis['thesis_code']) ?></h1>
+               <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">Institutional submission assigned for scholarly verification.</div>
             </div>
 
+            <div class="author-badge">
+               <div style="width: 45px; height: 45px; background: var(--crimson); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800;">
+                 <?= htmlspecialchars(strtoupper(substr($thesis['first_name'], 0, 1) . substr($thesis['last_name'], 0, 1))) ?>
+               </div>
+               <div>
+                  <div style="font-weight: 800; color: var(--text-dark); font-size: 0.9rem;"><?= htmlspecialchars($thesis['first_name'] . ' ' . $thesis['last_name']) ?></div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;"><?= htmlspecialchars($thesis['college']) ?></div>
+               </div>
+            </div>
+
+            <!-- Version Switcher -->
+            <div style="margin-bottom: 1.5rem;">
+               <span style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Manuscript History</span>
+               <div class="version-nav">
+                  <?php foreach ($versions as $idx => $v): ?>
+                    <a href="<?= BASE_URL ?>faculty/review.php?id=<?= $thesis_id ?>&v=<?= $v['id'] ?>" class="v-pill <?= ($idx === 0) ? 'active' : '' ?>">
+                       v<?= $v['version_number'] ?>
+                    </a>
+                  <?php endforeach; ?>
+               </div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid var(--border-faint); margin: 2rem 0;">
+
+            <h3 style="font-family: var(--font-serif); font-size: 1.2rem; margin-bottom: 1rem;">Formal Evaluation</h3>
+            
             <?php if ($latestVersion && $latestVersion['status'] === 'pending' && $thesis['status'] === 'pending_review'): ?>
-              <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 2rem;">As a formal reviewer, your decision will dictate the archival lifecycle of this research artifact.</p>
-              
-              <form action="" method="POST">
-                <div class="form-group" style="margin-bottom: 1.5rem;">
-                   <label class="form-label" style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem;">Formal Decision</label>
-                   <select name="action" required class="form-control" style="width: 100%; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border); font-family: 'Nunito';">
-                      <option value="">Select an action...</option>
-                      <option value="approved">Verify & Approve Publication</option>
-                      <option value="revision_requested">Grant Revision Request</option>
-                      <option value="rejected">Formal Rejection</option>
-                   </select>
-                </div>
+               <form action="" method="POST">
+                  <div style="margin-bottom: 1.5rem;">
+                     <label style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem;">Decision Decree</label>
+                     <select name="action" required style="width: 100%; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-strong); font-family: var(--font-base); font-weight: 700;">
+                        <option value="">Select scholarly verdict...</option>
+                        <option value="approved">VERIFY & APPROVE ARCHIVAL</option>
+                        <option value="revision_requested">REFINE MANUSCRIPT (REVISION)</option>
+                        <option value="rejected">FORMAL REJECTION</option>
+                     </select>
+                  </div>
 
-                <div class="form-group" style="margin-bottom: 2rem;">
-                   <label class="form-label" style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem;">Adviser Critique & Notes</label>
-                   <textarea name="feedback" class="form-control" rows="10" placeholder="Provide scholarly feedback to the authors..." style="width: 100%; padding: 1rem; border-radius: 4px; border: 1px solid var(--border); font-family: 'Nunito'; line-height: 1.6;"></textarea>
-                   <p style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.5rem; font-style: italic;">Feedback is mandatory for revisions/rejections.</p>
-                </div>
+                  <div style="margin-bottom: 1.5rem;">
+                     <label style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem;">Adviser Review & Critique</label>
+                     <textarea name="feedback" required rows="10" placeholder="Enter your scholarly feedback..." style="width: 100%; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-strong); font-family: var(--font-serif); font-size: 0.95rem; line-height: 1.6;"></textarea>
+                     <p style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.5rem; font-style: italic;">Detailed feedback is required for institutional transparency.</p>
+                  </div>
 
-                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 1.25rem; font-weight: 800; font-size: 1rem;">
-                   Finalize Formal Decision
-                </button>
-              </form>
+                  <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1.25rem; font-size: 0.9rem; letter-spacing: 0.05em; box-shadow: var(--shadow-md);">
+                     FINALIZE SCHOLARLY DECISION
+                  </button>
+               </form>
             <?php else: ?>
-               <div style="text-align: center; padding: 2rem 0;">
-                  <i class="ph-bold ph-seal-check" style="font-size: 4rem; color: var(--crimson); opacity: 0.15; margin-bottom: 1.5rem; display: block;"></i>
-                  <h4 style="font-family: var(--font-serif); font-size: 1.25rem; margin-bottom: 0.5rem;">Review Concluded</h4>
-                  <p style="font-size: 0.85rem; color: var(--text-muted);">This research artifact has already been processed by the assigned faculty adviser.</p>
+               <div style="background: var(--off-white); border-radius: var(--radius-sm); padding: 2rem; text-align: center; border: 2px dashed var(--border-strong);">
+                  <i class="ph-bold ph-seal-check" style="font-size: 2.5rem; color: var(--crimson); opacity: 0.4;"></i>
+                  <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Review Concluded</h4>
+                  <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">This manuscript iteration has already been processed by the assigned faculty.</p>
                </div>
-               <div style="margin-top: 2rem; border-top: 1px solid var(--off-white); padding-top: 1.5rem;">
-                  <a href="<?= BASE_URL ?>faculty/review.php" class="btn btn-secondary" style="width: 100%; justify-content: center; text-decoration: none; padding: 1rem; font-weight: 700;">Return to Queue</a>
-               </div>
+               
+               <?php if (!empty($latestVersion['feedback'])): ?>
+                  <div style="margin-top: 2rem; padding: 1.5rem; background: white; border-left: 3px solid var(--gold); box-shadow: var(--shadow-sm); font-family: var(--font-serif); font-style: italic; line-height: 1.6; color: var(--text-mid);">
+                     <?= nl2br(htmlspecialchars($latestVersion['feedback'])) ?>
+                  </div>
+               <?php endif; ?>
+
+               <a href="<?= BASE_URL ?>faculty/review.php" class="btn btn-secondary" style="width: 100%; margin-top: 2rem; padding: 1rem;">
+                  Back to Queue
+               </a>
             <?php endif; ?>
          </div>
       </aside>
+
     </div>
-
   </main>
-
 <?php require_once __DIR__ . '/../includes/layout_bottom.php'; exit; ?>
 
 <?php

@@ -3,18 +3,59 @@
 /* -------------- */
 
 /* Overrides to adapt the auth-left panel from login.css */
-.auth-left-register {
+/* Double-class for higher specificity over .auth-left in login.css */
+.auth-left.auth-left-register {
   position: relative;
+  justify-content: flex-start;
+  gap: 0;
+  overflow: visible !important;
+  padding: 2rem 3rem;
+}
+
+/* Parent grid also clips — override for register page */
+body.auth-page:has(.auth-left-register) {
+  overflow: visible !important;
+}
+
+/* Scale down the register page hero to leave room for institutional card */
+.auth-left-register .auth-hero-text h1 {
+  font-size: 2.6rem !important;
+  margin-bottom: 0.5rem;
+}
+
+.auth-left-register .auth-hero-text p {
+  font-size: 0.88rem;
+  margin-bottom: 0;
+}
+
+.auth-left-register .auth-brand {
+  margin-bottom: 2rem;
+}
+
+
+/* Ensure all direct children sit above the pseudo-element overlays */
+.auth-left-register .auth-brand,
+.auth-left-register .auth-hero-text,
+.auth-left-register .auth-info-card,
+.auth-left-register .avatar-stack-wrap {
+  position: relative;
+  z-index: 2;
+}
+
+/* Push avatar stack to bottom */
+.auth-left-register .avatar-stack-wrap {
+  margin-top: auto;
+  padding-top: 2rem;
 }
 
 /* Institutional Access Card */
 .auth-info-card {
   background-color: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   padding: 1.5rem;
   margin-top: 2rem;
-  margin-bottom: 2rem;
+  margin-bottom: 0;
 }
 .aic-header {
   display: flex;

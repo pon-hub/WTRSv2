@@ -117,7 +117,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <tr>
                 <td style="padding-left: 2rem;">
                   <div class="student-identity">
-                    <div class="av-box-lg"><?= htmlspecialchars(strtoupper(substr($s['first_name'], 0, 1) . substr($s['last_name'], 1, 1))) ?></div>
+                    <div class="av-box-lg"><?= htmlspecialchars(strtoupper(substr($s['first_name'], 0, 1) . substr($s['last_name'], 0, 1))) ?></div>
                     <div>
                        <div style="font-weight: 800; color: var(--text-dark);"><?= htmlspecialchars($s['first_name'] . ' ' . $s['last_name']) ?></div>
                        <div style="font-size: 0.75rem; color: var(--text-muted);"><?= htmlspecialchars($s['email']) ?></div>
@@ -129,11 +129,11 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                    <div style="font-weight: 800; font-size: 1rem; color: var(--text-dark);"><?= (int)$s['submission_count'] ?> Total</div>
                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">Last active: <?= $s['last_activity'] ? date('M j, Y', strtotime($s['last_activity'])) : 'N/A' ?></div>
                 </td>
-                <td style="padding-right: 2rem; text-align: right;">
-                   <a href="<?= BASE_URL ?>faculty/review.php?search=<?= urlencode($s['first_name'] . ' ' . $s['last_name']) ?>" class="btn-action-outline" style="text-decoration: none; padding: 0.5rem 1.25rem; font-weight: 800; font-size: 0.75rem; border-color: var(--crimson); color: var(--crimson);">
-                      <i class="ph ph-list-magnifying-glass"></i> Inspect Records
-                   </a>
-                </td>
+                 <td style="padding-right: 2rem; text-align: right;">
+                    <a href="<?= BASE_URL ?>faculty/student_record.php?id=<?= (int)$s['id'] ?>" class="btn-action-outline" style="text-decoration: none; padding: 0.5rem 1.25rem; font-weight: 800; font-size: 0.75rem; border-color: var(--crimson); color: var(--crimson);">
+                       <i class="ph ph-list-magnifying-glass"></i> Inspect Records
+                    </a>
+                 </td>
               </tr>
             <?php endforeach; ?>
           <?php endif; ?>

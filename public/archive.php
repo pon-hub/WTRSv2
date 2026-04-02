@@ -129,7 +129,11 @@ $totalApproved = $countStmt->fetchColumn();
 
   <footer class="pub-footer">
     <div style="margin-bottom: 2rem;">
-      <i class="ph-fill ph-seal" style="font-size: 3rem; color: var(--crimson); opacity: 0.1;"></i>
+      <img
+        src="<?= BASE_URL ?>assets/images/wmsu-logo.png"
+        alt="WMSU Logo"
+        style="width: 72px; height: 72px; object-fit: contain; opacity: 0.12;"
+      />
     </div>
     <p style="font-size: 0.85rem; color: var(--text-muted);">&copy; <?= date('Y') ?> Western Mindanao State University. Scholarly Repository System.</p>
     <div style="display: flex; justify-content: center; gap: 2rem; margin-top: 2rem;">

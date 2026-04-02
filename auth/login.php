@@ -3,6 +3,15 @@ require_once __DIR__ . '/../includes/session.php';
 
 $error = null;
 
+// ── Live Stats ──────────────────────────────────────────────────────────────
+$archivedCount   = (int)$pdo->query("SELECT COUNT(*) FROM theses WHERE status = 'approved'")->fetchColumn();
+$researcherCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active'")->fetchColumn();
+
+function fmt_stat(int $n): string {
+    if ($n >= 1000) return round($n / 1000, 1) . 'k+';
+    return $n > 0 ? $n . '+' : '0';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $email = trim($_POST['email'] ?? '');
   $password = $_POST['password'] ?? '';
@@ -116,12 +125,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       <div class="auth-stats">
         <div class="auth-stat-item">
-          <h3>12k+</h3>
+          <h3><?= fmt_stat($archivedCount) ?></h3>
           <p>Archived Theses</p>
         </div>
         <div class="stat-divider"></div>
         <div class="auth-stat-item">
-          <h3>850+</h3>
+          <h3><?= fmt_stat($researcherCount) ?></h3>
           <p>Active Researchers</p>
         </div>
       </div>

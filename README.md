@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # WMSU Thesis Repository System (WTRS)
 
 ## Project organization
@@ -30,7 +29,3 @@
 - Add an `/auth/verify.php` route and email verification flow.
 - Add `admin/users.php` search + pagination via query parameters.
 - Add password reset and profile editing.
-=======
-# WTRS-Project
-WMSU Thesis Repository System 
->>>>>>> e3e8fff93bffcc06b3c16722d26d25572e2e9a99

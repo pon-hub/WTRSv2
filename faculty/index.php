@@ -114,9 +114,6 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
       <h1>Welcome, <span><?= htmlspecialchars($user['first_name']) ?></span></h1>
       <p>Oversee pending academic contributions, manage student roles, and maintain repository integrity.</p>
     </div>
-    <a href="<?= BASE_URL ?>faculty/review.php?status=pending_review" class="btn btn-primary" style="text-decoration:none;">
-      <i class="ph-bold ph-clipboard-text"></i> Review Queue
-    </a>
   </div>
 
   <!-- Stat Cards -->
@@ -146,8 +143,8 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
   <!-- Recent Queue Section -->
   <div class="section-header">
     <div>
-      <div class="section-title">Submission Queue</div>
-      <div class="section-sub">Latest research manuscripts dispatched for review</div>
+      <div class="section-title">Recent Submissions</div>
+      <div class="section-sub">Latest research manuscripts dispatched for your evaluation</div>
     </div>
     <a href="<?= BASE_URL ?>faculty/review.php" class="btn btn-secondary" style="font-size:0.75rem; padding:0.5rem 1rem; text-decoration:none;">
       View Entire Queue <i class="ph-bold ph-arrow-right"></i>
@@ -169,7 +166,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
             <th>Author</th>
             <th>Received</th>
             <th>Status / Version</th>
-            <th style="text-align: right; padding-right: 2rem;">Actions</th>
+            <th style="text-align: right; padding-right: 1rem;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -203,7 +200,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                   <?php endif; ?>
                 </div>
               </td>
-              <td style="text-align: right; padding-right: 2rem;">
+              <td style="text-align: right; padding-right: 1rem;">
                 <a href="<?= BASE_URL ?>faculty/review.php?id=<?= (int)$t['id'] ?>" class="btn-view-details">
                   View Details <i class="ph-bold ph-arrow-right"></i>
                 </a>
