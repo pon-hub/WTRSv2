@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
-require_login(['admin', 'adviser']); // Preserved 'adviser' for compatibility
+require_login(['adviser']);
 
 $user = current_user();
 $flash = null;

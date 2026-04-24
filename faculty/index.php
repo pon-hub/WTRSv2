@@ -1,36 +1,24 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
-require_login(['adviser', 'admin']);
+require_login(['adviser']);
 
 $user = current_user();
 
 // ── Dashboard Stats ──────────────────────────────────────────────────────────
 
-// Total theses assigned to this adviser (Admins see all assigned, Advisers see theirs)
-if ($user['role'] === 'admin') {
-    $stmtTotal = $pdo->query("SELECT COUNT(*) FROM theses WHERE adviser_id IS NOT NULL");
-} else {
-    $stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM theses WHERE adviser_id = :id");
-    $stmtTotal->execute(['id' => $user['id']]);
-}
+// Total theses assigned to this adviser
+$stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM theses WHERE adviser_id = :id");
+$stmtTotal->execute(['id' => $user['id']]);
 $totalAssigned = (int)$stmtTotal->fetchColumn();
 
-// Pending reviews
-if ($user['role'] === 'admin') {
-    $stmtPending = $pdo->query("SELECT COUNT(*) FROM theses WHERE status = 'pending_review'");
-} else {
-    $stmtPending = $pdo->prepare("SELECT COUNT(*) FROM theses WHERE adviser_id = :id AND status = 'pending_review'");
-    $stmtPending->execute(['id' => $user['id']]);
-}
+// In-review theses
+$stmtPending = $pdo->prepare("SELECT COUNT(*) FROM theses WHERE adviser_id = :id AND status = 'pending_review'");
+$stmtPending->execute(['id' => $user['id']]);
 $pendingCount = (int)$stmtPending->fetchColumn();
 
 // Active students
-if ($user['role'] === 'admin') {
-    $stmtStudents = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM theses");
-} else {
-    $stmtStudents = $pdo->prepare("SELECT COUNT(DISTINCT author_id) FROM theses WHERE adviser_id = :id");
-    $stmtStudents->execute(['id' => $user['id']]);
-}
+$stmtStudents = $pdo->prepare("SELECT COUNT(DISTINCT author_id) FROM theses WHERE adviser_id = :id");
+$stmtStudents->execute(['id' => $user['id']]);
 $activeStudents = (int)$stmtStudents->fetchColumn();
 
 // Recent queue (latest 5)
@@ -46,18 +34,23 @@ $sqlQueue = "
         ORDER BY submitted_at DESC LIMIT 1
     )
 ";
-if ($user['role'] !== 'admin') {
-    $sqlQueue .= " WHERE t.adviser_id = :id ";
-}
-$sqlQueue .= " ORDER BY tv.submitted_at DESC LIMIT 5 ";
+$sqlQueue .= " WHERE t.adviser_id = :id ";
+$sqlQueue .= " ORDER BY COALESCE(tv.submitted_at, t.created_at) DESC LIMIT 10 ";
 
 $stmtQueue = $pdo->prepare($sqlQueue);
-if ($user['role'] !== 'admin') {
-    $stmtQueue->execute(['id' => $user['id']]);
-} else {
-    $stmtQueue->execute();
-}
+$stmtQueue->execute(['id' => $user['id']]);
 $recentTheses = $stmtQueue->fetchAll();
+
+function faculty_dashboard_status_label(string $status): string
+{
+    if ($status === 'pending_review') return 'PENDING ADVISER APPROVAL';
+    if ($status === 'revision_requested') return 'NEEDS REVISION';
+    if ($status === 'approved') return 'ACCEPTED';
+    if ($status === 'archived') return 'PUBLISHED';
+    if ($status === 'rejected') return 'REJECTED';
+    if ($status === 'draft') return 'AWAITING ADVISER';
+    return strtoupper(str_replace('_', ' ', $status));
+}
 
 ob_start();
 ?>
@@ -127,9 +120,9 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
 
     <a href="<?= BASE_URL ?>faculty/review.php?status=pending_review" class="stat-card accent-gold" style="text-decoration:none;">
       <div class="stat-icon"><i class="ph-fill ph-clock-counter-clockwise"></i></div>
-      <div class="stat-title">Pending Reviews</div>
+      <div class="stat-title">In Review</div>
       <div class="stat-value"><?= $pendingCount ?></div>
-      <div class="stat-meta"><i class="ph ph-warning"></i> Awaiting faculty decision</div>
+      <div class="stat-meta"><i class="ph ph-warning"></i> Waiting for your decision</div>
     </a>
 
     <a href="<?= BASE_URL ?>faculty/students.php" class="stat-card accent-teal" style="text-decoration:none;">
@@ -155,7 +148,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
     <?php if (empty($recentTheses)): ?>
       <div class="empty-state">
         <i class="ph-fill ph-tray"></i>
-        <h3>No Pending Submissions</h3>
+        <h3>No Active Reviews</h3>
         <p>When students submit manuscripts, they will appear here for your formal evaluation.</p>
       </div>
     <?php else: ?>
@@ -166,7 +159,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
             <th>Author</th>
             <th>Received</th>
             <th>Status / Version</th>
-            <th style="text-align: right; padding-right: 1rem;">Actions</th>
+            <th style="text-align: right; padding-right:1rem;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -190,13 +183,15 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                 <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
                   <span class="version-pill">v<?= htmlspecialchars($t['latest_version'] ?? '1.0') ?></span>
                   <?php if ($t['status'] === 'pending_review'): ?>
-                    <span class="badge badge-pending"><span class="dot dot-pending"></span> PENDING REVIEW</span>
+                    <span class="badge badge-pending"><span class="dot dot-pending"></span> PENDING ADVISER APPROVAL</span>
                   <?php elseif ($t['status'] === 'approved'): ?>
-                    <span class="badge badge-approved"><span class="dot dot-approved"></span> APPROVED</span>
+                    <span class="badge" style="background: #E0F2FE; color: #075985;"><span class="dot" style="background: #0EA5E9;"></span> ACCEPTED</span>
+                  <?php elseif ($t['status'] === 'archived'): ?>
+                    <span class="badge badge-approved"><span class="dot dot-approved"></span> PUBLISHED</span>
                   <?php elseif ($t['status'] === 'revision_requested'): ?>
-                    <span class="badge badge-revision"><span class="dot dot-revision"></span> REVISION</span>
-                  <?php else: ?>
-                    <span class="badge badge-default"><?= strtoupper($t['status']) ?></span>
+                    <span class="badge badge-revision"><span class="dot dot-revision"></span> NEEDS REVISION</span>
+                  <?php elseif ($t['status'] === 'rejected'): ?>
+                    <span class="badge badge-default"><?= faculty_dashboard_status_label($t['status']) ?></span>
                   <?php endif; ?>
                 </div>
               </td>

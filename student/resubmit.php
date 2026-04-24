@@ -72,10 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $insVStmt->execute([$thesis_id, $versionNum, $fileName, $fileSize]);
                     
                     $pdo->commit();
-                    $success = "Revision submitted successfully!";
-                    
-                    // Redirect after short delay or just stay to show success
-                    header("Refresh: 2; URL=tracker.php?id=$thesis_id");
+                    $_SESSION['student_dash_flash'] = [
+                        'type' => 'success',
+                        'message' => 'Revision submitted successfully.',
+                    ];
+                    header('Location: ' . BASE_URL . 'student/tracker.php?id=' . (int) $thesis_id, true, 303);
+                    exit;
                 } catch (Exception $e) {
                     $pdo->rollBack();
                     $error = "Database error: " . $e->getMessage();

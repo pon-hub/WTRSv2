@@ -8,10 +8,11 @@ require_once __DIR__ . '/../includes/session.php';
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>About WTRS - WMSU Repository</title>
   
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,800;1,800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <!-- Fonts & Icons -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/nunito.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/playfair-display.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/cormorant-garamond.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/vendor/phosphor/css/phosphor-all.css">
 
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/global.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/public.css">
@@ -45,7 +46,7 @@ require_once __DIR__ . '/../includes/session.php';
       </div>
       
       <div style="position: relative;">
-        <img src="https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" alt="Library" style="border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 100%; height: 500px; object-fit: cover;">
+        <img src="../assets/images/library.png" alt="Library" style="border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 100%; height: 500px; object-fit: cover;">
         <div style="position: absolute; bottom: -2rem; left: -2rem; background: var(--crimson); color: white; padding: 2rem; border-radius: var(--radius-sm); box-shadow: var(--shadow-md);">
           <h3 style="font-size: 3rem; font-weight: 800; margin: 0; color: white;">50+</h3>
           <p style="font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; color: rgba(255,255,255,0.7);">YEARS OF RESEARCH</p>

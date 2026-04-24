@@ -60,6 +60,26 @@
 
 .pub-logo i { font-size: 1.4rem; }
 
+.brand-seal-box {
+  width: 32px;
+  height: 32px;
+  background: rgba(139, 0, 0, 0.05);
+  border-radius: 50%;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid rgba(139, 0, 0, 0.1);
+}
+
+.brand-seal-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .nav-link {
   text-decoration: none;
   color: var(--text-muted);
@@ -234,6 +254,26 @@
 }
 
 .pub-results-sort strong { color: var(--text-dark); }
+
+.pub-results-sort-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-base);
+}
+
+.pub-sort-select {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  padding: 0.35rem 0.55rem;
+  font-family: var(--font-base);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dark);
+}
 
 
 /* --- Thesis Cards --- */

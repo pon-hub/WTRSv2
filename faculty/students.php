@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
-require_login(['adviser', 'admin']);
+require_login(['adviser']);
 
 $user   = current_user();
 $search = trim($_GET['search'] ?? '');
@@ -8,17 +8,15 @@ $search = trim($_GET['search'] ?? '');
 // ── DATA FETCHING ────────────────────────────────────────────────────────────
 
 $params = [];
-if ($user['role'] !== 'admin') {
-    $params['adviser_id'] = $user['id'];
-}
+$params['adviser_id'] = $user['id'];
 
 $searchClause = '';
 if ($search !== '') {
-    $searchClause     = "AND (u.first_name LIKE :search OR u.last_name LIKE :search OR u.college LIKE :search)";
+    $searchClause     = "AND (u.first_name LIKE :search OR u.last_name LIKE :search OR u.college LIKE :search OR u.course LIKE :search OR u.student_id LIKE :search)";
     $params['search'] = '%' . $search . '%';
 }
 
-$adviserConstraint = ($user['role'] === 'admin') ? "" : "AND t.adviser_id = :adviser_id";
+$adviserConstraint = "AND t.adviser_id = :adviser_id";
 
 $stmt = $pdo->prepare("
     SELECT
@@ -26,6 +24,9 @@ $stmt = $pdo->prepare("
         u.first_name,
         u.last_name,
         u.college,
+        u.course,
+        u.year_level,
+        u.student_id,
         u.email,
         COUNT(DISTINCT t.id)              AS submission_count,
         MAX(tv.submitted_at)              AS last_activity,
@@ -37,7 +38,7 @@ $stmt = $pdo->prepare("
     LEFT JOIN thesis_versions tv ON tv.thesis_id = t.id
     WHERE u.role = 'student'
     $searchClause
-    GROUP BY u.id, u.first_name, u.last_name, u.college, u.email
+    GROUP BY u.id, u.first_name, u.last_name, u.college, u.course, u.year_level, u.student_id, u.email
     ORDER BY last_activity DESC
 ");
 $stmt->execute($params);
@@ -90,11 +91,11 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
           <div class="stat-val"><?= array_sum(array_column($students, 'submission_count')) ?></div>
        </div>
        <div class="stat-item" style="border-left: 1px solid var(--border); padding-left: 2rem;">
-          <span class="stat-label">Approved Artifacts</span>
+          <span class="stat-label">Accepted Artifacts</span>
           <div class="stat-val" style="color: #065F46;"><?= array_sum(array_column($students, 'approved_count')) ?></div>
        </div>
        <div class="stat-item" style="border-left: 1px solid var(--border); padding-left: 2rem;">
-          <span class="stat-label">Pending Decision</span>
+          <span class="stat-label">In Review</span>
           <div class="stat-val" style="color: var(--gold);"><?= array_sum(array_column($students, 'pending_count')) ?></div>
        </div>
     </div>
@@ -104,7 +105,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
         <thead>
           <tr>
             <th style="padding-left: 2rem;">Student Information</th>
-            <th>Academic Department</th>
+            <th>Academic Profile</th>
             <th>Submission Activity</th>
             <th style="padding-right: 2rem; text-align: right;">Actions</th>
           </tr>
@@ -119,12 +120,25 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                   <div class="student-identity">
                     <div class="av-box-lg"><?= htmlspecialchars(strtoupper(substr($s['first_name'], 0, 1) . substr($s['last_name'], 0, 1))) ?></div>
                     <div>
-                       <div style="font-weight: 800; color: var(--text-dark);"><?= htmlspecialchars($s['first_name'] . ' ' . $s['last_name']) ?></div>
+                       <div style="font-weight: 800; color: var(--text-dark);">
+                         <?= htmlspecialchars($s['first_name'] . ' ' . $s['last_name']) ?>
+                         <?php if (!empty($s['student_id'])): ?>
+                           <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: normal; margin-left: 0.5rem;">(<?= htmlspecialchars($s['student_id']) ?>)</span>
+                         <?php endif; ?>
+                       </div>
                        <div style="font-size: 0.75rem; color: var(--text-muted);"><?= htmlspecialchars($s['email']) ?></div>
                     </div>
                   </div>
                 </td>
-                <td style="font-weight: 700; font-size: 0.82rem; color: var(--text-muted);"><?= htmlspecialchars($s['college']) ?></td>
+                <td>
+                   <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-dark);"><?= htmlspecialchars($s['course'] ?: 'Course Not Provided') ?></div>
+                   <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+                     <?= htmlspecialchars($s['college']) ?> 
+                     <?php if (!empty($s['year_level'])): ?>
+                       &bull; <?= htmlspecialchars($s['year_level']) ?>
+                     <?php endif; ?>
+                   </div>
+                </td>
                 <td>
                    <div style="font-weight: 800; font-size: 1rem; color: var(--text-dark);"><?= (int)$s['submission_count'] ?> Total</div>
                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">Last active: <?= $s['last_activity'] ? date('M j, Y', strtotime($s['last_activity'])) : 'N/A' ?></div>

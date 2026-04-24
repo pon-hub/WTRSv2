@@ -3,6 +3,13 @@ require_once __DIR__ . '/../includes/session.php';
 require_login(['student']);
 
 $user = current_user();
+
+$dashFlash = null;
+if (!empty($_SESSION['student_dash_flash'])) {
+    $dashFlash = $_SESSION['student_dash_flash'];
+    unset($_SESSION['student_dash_flash']);
+}
+
 $thesis_id = $_GET['id'] ?? null;
 
 if (!$thesis_id) {
@@ -81,6 +88,13 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
       <i class="ph ph-caret-right" style="margin: 0 0.5rem; opacity: 0.5;"></i>
       <span style="color: var(--crimson);"><?= htmlspecialchars($thesis['thesis_code']) ?></span>
     </nav>
+
+    <?php if (!empty($dashFlash)): ?>
+      <div style="display:flex;align-items:flex-start;gap:0.65rem;margin-bottom:1.5rem;padding:0.9rem 1.1rem;border-radius:var(--radius-sm);font-size:0.88rem;font-weight:700;line-height:1.45;background:<?= ($dashFlash['type'] ?? '') === 'success' ? '#D1FAE5' : '#FEE2E2' ?>;color:<?= ($dashFlash['type'] ?? '') === 'success' ? '#065F46' : '#991B1B' ?>;border:1px solid <?= ($dashFlash['type'] ?? '') === 'success' ? '#6EE7B7' : '#FECACA' ?>;">
+        <i class="ph-bold <?= ($dashFlash['type'] ?? '') === 'success' ? 'ph-check-circle' : 'ph-warning-circle' ?>" style="font-size:1.2rem;flex-shrink:0;"></i>
+        <span><?= htmlspecialchars($dashFlash['message'] ?? '') ?></span>
+      </div>
+    <?php endif; ?>
 
     <div style="display: grid; grid-template-columns: 2.4fr 1fr; gap: 2.5rem;">
       

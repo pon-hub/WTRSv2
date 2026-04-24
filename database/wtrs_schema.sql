@@ -14,7 +14,7 @@ USE `wtrs_db`;
 
 -- --------------------------------------------------------
 -- Table structure for table `users`
--- Handles authentication for both Students and Faculty Advisers (Admins)
+-- Handles authentication for Students and Faculty Advisers
 
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -22,7 +22,7 @@ CREATE TABLE `users` (
   `last_name` varchar(100) NOT NULL,
   `email` varchar(150) NOT NULL,
   `password` varchar(255) NOT NULL,
-  `role` enum('student','adviser','admin') NOT NULL DEFAULT 'student',
+  `role` enum('student','adviser') NOT NULL DEFAULT 'student',
 
   `college` varchar(150) DEFAULT NULL,
   `status` enum('pending','active','inactive') NOT NULL DEFAULT 'pending',
@@ -30,12 +30,6 @@ CREATE TABLE `users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- Insert a default Administrator (Adviser Account) for system management
-INSERT INTO `users` (`first_name`, `last_name`, `email`, `password`, `role`, `college`, `status`) VALUES
-('System', 'Administrator', 'admin@wmsu.edu.ph', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 'College of Computing Studies', 'active');
-
--- Note: The default password above is 'password'. Change this upon login.
 
 -- --------------------------------------------------------
 -- Table structure for table `theses`
@@ -45,7 +39,7 @@ CREATE TABLE `theses` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `thesis_code` varchar(50) NOT NULL,
   `title` varchar(255) NOT NULL,
-  `abstract` text NOT NULL,
+  `abstract` text DEFAULT NULL,
   `author_id` int(11) NOT NULL,
   `adviser_id` int(11) DEFAULT NULL,
   `status` enum('draft','pending_review','revision_requested','approved','rejected','archived') NOT NULL DEFAULT 'draft',
@@ -53,6 +47,7 @@ CREATE TABLE `theses` (
   `downloads` int(11) NOT NULL DEFAULT '0',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `hardbound_received_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `thesis_code` (`thesis_code`),
   FOREIGN KEY (`author_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
@@ -80,7 +75,7 @@ CREATE TABLE `thesis_versions` (
 
 -- --------------------------------------------------------
 -- Table structure for table `activity_logs`
--- Audit trail tracking for the Admin/Adviser Dashboard
+-- Audit trail tracking for dashboard actions
 
 CREATE TABLE `activity_logs` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -93,6 +88,25 @@ CREATE TABLE `activity_logs` (
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- --------------------------------------------------------
+-- Table structure for table `notifications`
+-- User-targeted in-app notifications (e.g., thesis requests)
+
+CREATE TABLE `notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `recipient_user_id` int(11) NOT NULL,
+  `sender_user_id` int(11) DEFAULT NULL,
+  `thesis_id` int(11) DEFAULT NULL,
+  `type` varchar(50) NOT NULL DEFAULT 'thesis_request',
+  `message` text NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_notifications_recipient` (`recipient_user_id`,`is_read`,`created_at`),
+  CONSTRAINT `fk_notifications_recipient` FOREIGN KEY (`recipient_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_notifications_sender` FOREIGN KEY (`sender_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_notifications_thesis` FOREIGN KEY (`thesis_id`) REFERENCES `theses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 -- Table structure for table `system_settings`
@@ -109,7 +123,7 @@ CREATE TABLE `system_settings` (
 INSERT INTO `system_settings` (`setting_key`, `setting_value`) VALUES
 ('repository_name', 'WMSU Repository'),
 ('institution', 'Western Mindanao State University'),
-('contact_email', 'repository.admin@wmsu.edu.ph'),
+('contact_email', 'repository.support@wmsu.edu.ph'),
 ('max_file_size_mb', '20'),
 ('allow_guest_search', '1'),
 ('require_wmsu_email', '1');

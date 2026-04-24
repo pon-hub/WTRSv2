@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
-require_login(['adviser', 'admin']);
+require_login(['adviser']);
 
 $user = current_user();
 $flash = null;
@@ -114,8 +114,8 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
           </div>
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">Admin Contact Email</label>
-          <input type="email" name="contact_email" class="form-control" value="<?= htmlspecialchars($settings['contact_email'] ?? 'repository.admin@wmsu.edu.ph') ?>">
+          <label class="form-label">Repository Contact Email</label>
+          <input type="email" name="contact_email" class="form-control" value="<?= htmlspecialchars($settings['contact_email'] ?? 'repository.support@wmsu.edu.ph') ?>">
         </div>
       </div>
 

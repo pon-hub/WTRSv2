@@ -167,6 +167,14 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <option value="College of Engineering" <?= $profile['college'] === 'College of Engineering' ? 'selected' : '' ?>>College of Engineering</option>
               <option value="College of Liberal Arts" <?= $profile['college'] === 'College of Liberal Arts' ? 'selected' : '' ?>>College of Liberal Arts</option>
               <option value="College of Science and Mathematics" <?= $profile['college'] === 'College of Science and Mathematics' ? 'selected' : '' ?>>College of Science and Mathematics</option>
+              <option value="College of Education" <?= $profile['college'] === 'College of Education' ? 'selected' : '' ?>>College of Education</option>
+              <option value="College of Business Administration" <?= $profile['college'] === 'College of Business Administration' ? 'selected' : '' ?>>College of Business Administration</option>
+              <option value="College of Nursing" <?= $profile['college'] === 'College of Nursing' ? 'selected' : '' ?>>College of Nursing</option>
+              <option value="College of Social Work and Community Development" <?= $profile['college'] === 'College of Social Work and Community Development' ? 'selected' : '' ?>>College of Social Work and Community Development</option>
+              <option value="College of Home Economics" <?= $profile['college'] === 'College of Home Economics' ? 'selected' : '' ?>>College of Home Economics</option>
+              <option value="College of Forestry and Environmental Studies" <?= $profile['college'] === 'College of Forestry and Environmental Studies' ? 'selected' : '' ?>>College of Forestry and Environmental Studies</option>
+              <option value="College of Agriculture" <?= $profile['college'] === 'College of Agriculture' ? 'selected' : '' ?>>College of Agriculture</option>
+              <option value="College of Law" <?= $profile['college'] === 'College of Law' ? 'selected' : '' ?>>College of Law</option>
             </select>
           </div>
 

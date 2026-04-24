@@ -1,13 +1,86 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
+require_login();
 $user = current_user();
 
 $adviserNotifs = [];
 $notifications  = [];
+$requestNotifs = [];
+$requestDecisionNotifs = [];
 $myLogs         = [];
+$flash = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($user['role'] ?? '') === 'adviser') {
+    $action = $_POST['request_action'] ?? '';
+    $notificationId = isset($_POST['notification_id']) ? (int)$_POST['notification_id'] : 0;
+    $thesisId = isset($_POST['thesis_id']) ? (int)$_POST['thesis_id'] : 0;
+
+    if ($notificationId <= 0 || $thesisId <= 0 || !in_array($action, ['accept_request', 'decline_request'], true)) {
+        $flash = ['type' => 'error', 'message' => 'Invalid request action.'];
+    } else {
+        $pdo->beginTransaction();
+        try {
+            $notifCheckStmt = $pdo->prepare("SELECT * FROM notifications WHERE id = :id AND recipient_user_id = :recipient_id AND type = 'thesis_request' LIMIT 1");
+            $notifCheckStmt->execute([
+                'id' => $notificationId,
+                'recipient_id' => $user['id']
+            ]);
+            $requestNotif = $notifCheckStmt->fetch();
+
+            if (!$requestNotif) {
+                throw new Exception('Request notification not found.');
+            }
+
+            $thesisStmt = $pdo->prepare("SELECT id, author_id, adviser_id, status, title FROM theses WHERE id = :id LIMIT 1");
+            $thesisStmt->execute(['id' => $thesisId]);
+            $thesis = $thesisStmt->fetch();
+
+            if (!$thesis || (int)$thesis['adviser_id'] !== (int)$user['id'] || $thesis['status'] !== 'draft') {
+                throw new Exception('Thesis request is no longer actionable.');
+            }
+
+            if ($action === 'accept_request') {
+                $approveStmt = $pdo->prepare("UPDATE theses SET status = 'pending_review', updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+                $approveStmt->execute(['id' => $thesisId]);
+
+                $studentMessage = "Your thesis request was accepted by Prof. " . $user['last_name'] . ". Review has started.";
+            } else {
+                $declineStmt = $pdo->prepare("UPDATE theses SET adviser_id = NULL, status = 'draft', updated_at = CURRENT_TIMESTAMP WHERE id = :id");
+                $declineStmt->execute(['id' => $thesisId]);
+
+                $studentMessage = "Your thesis request was declined by Prof. " . $user['last_name'] . ". Please choose another adviser.";
+            }
+
+            $markReadStmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = :id");
+            $markReadStmt->execute(['id' => $notificationId]);
+
+            $studentNotifStmt = $pdo->prepare("INSERT INTO notifications (recipient_user_id, sender_user_id, thesis_id, type, message, is_read) VALUES (:recipient, :sender, :thesis_id, 'thesis_request_decision', :message, 0)");
+            $studentNotifStmt->execute([
+                'recipient' => $thesis['author_id'],
+                'sender' => $user['id'],
+                'thesis_id' => $thesisId,
+                'message' => $studentMessage
+            ]);
+
+            $pdo->commit();
+            $flash = ['type' => 'success', 'message' => $action === 'accept_request' ? 'Request accepted. Thesis is now in your review queue.' : 'Request declined. Student has been notified.'];
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $flash = ['type' => 'error', 'message' => $e->getMessage()];
+        }
+    }
+}
+
+// Mark in-app request notifications as read when this page is opened.
+$markReadOnOpenStmt = $pdo->prepare("UPDATE notifications
+                                     SET is_read = 1
+                                     WHERE recipient_user_id = :recipient_id
+                                       AND is_read = 0
+                                       AND type IN ('thesis_request_decision', 'thesis_request_cancelled')");
+$markReadOnOpenStmt->execute(['recipient_id' => (int)$user['id']]);
 
 // 1. ADVISER: Fetch pending thesis reviews assigned to this user
-if ($user['role'] === 'adviser' || $user['role'] === 'admin') {
+if ($user['role'] === 'adviser') {
     $stmt = $pdo->prepare("SELECT t.*, u.first_name, u.last_name 
                            FROM theses t 
                            JOIN users u ON t.author_id = u.id 
@@ -15,6 +88,27 @@ if ($user['role'] === 'adviser' || $user['role'] === 'admin') {
                            ORDER BY t.created_at DESC");
     $stmt->execute(['adviser_id' => $user['id']]);
     $adviserNotifs = $stmt->fetchAll();
+
+    $requestStmt = $pdo->prepare("SELECT n.*, t.thesis_code, t.title, u.first_name, u.last_name
+                                  FROM notifications n
+                                  LEFT JOIN theses t ON t.id = n.thesis_id
+                                  LEFT JOIN users u ON u.id = n.sender_user_id
+                                  WHERE n.recipient_user_id = :recipient_id
+                                    AND n.type IN ('thesis_request', 'thesis_request_cancelled')
+                                  ORDER BY n.created_at DESC LIMIT 15");
+    $requestStmt->execute(['recipient_id' => $user['id']]);
+    $requestNotifs = $requestStmt->fetchAll();
+}
+
+if ($user['role'] === 'student') {
+    $decisionStmt = $pdo->prepare("SELECT n.*, t.thesis_code, t.title, u.first_name as adviser_first, u.last_name as adviser_last
+                                   FROM notifications n
+                                   LEFT JOIN theses t ON t.id = n.thesis_id
+                                   LEFT JOIN users u ON u.id = n.sender_user_id
+                                   WHERE n.recipient_user_id = :recipient_id AND n.type = 'thesis_request_decision'
+                                   ORDER BY n.created_at DESC LIMIT 15");
+    $decisionStmt->execute(['recipient_id' => $user['id']]);
+    $requestDecisionNotifs = $decisionStmt->fetchAll();
 }
 
 // 2. STUDENT: Fetch recent feedback on their own theses
@@ -77,10 +171,59 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
 
     <div style="max-width: 900px;">
 
-      <!-- Adviser: Pending Reviews -->
+      <?php if ($flash): ?>
+      <div style="margin-bottom: 2rem; padding: 1rem 1.25rem; border-radius: var(--radius-sm); font-weight:700; color:#fff; background: <?= $flash['type'] === 'success' ? '#065F46' : '#991B1B' ?>;">
+        <?= htmlspecialchars($flash['message']) ?>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($user['role'] === 'adviser' && count($requestNotifs) > 0): ?>
+      <div class="notif-card">
+        <div class="notif-header">
+          <i class="ph-fill ph-bell-ringing"></i> Thesis Request Notifications
+        </div>
+        <?php foreach ($requestNotifs as $rn): ?>
+        <div class="notif-item">
+          <div class="notif-row">
+            <span class="notif-code"><?= htmlspecialchars($rn['thesis_code'] ?? 'THESIS REQUEST') ?></span>
+            <span class="notif-date"><?= date('M j, Y', strtotime($rn['created_at'])) ?></span>
+          </div>
+          <p class="notif-text"><?= htmlspecialchars($rn['message']) ?></p>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <span class="notif-author">From: <?= htmlspecialchars(trim(($rn['first_name'] ?? '') . ' ' . ($rn['last_name'] ?? ''))) ?></span>
+            <?php if (($rn['type'] ?? '') === 'thesis_request' && (int)($rn['is_read'] ?? 0) === 0 && !empty($rn['thesis_id'])): ?>
+              <a href="<?= BASE_URL ?>faculty/review.php?id=<?= (int)$rn['thesis_id'] ?>" class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.72rem; text-decoration:none;">View</a>
+            <?php else: ?>
+              <span class="notif-status status-approved"><?= ($rn['type'] ?? '') === 'thesis_request_cancelled' ? 'Canceled by Student' : 'Processed' ?></span>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($user['role'] === 'student' && count($requestDecisionNotifs) > 0): ?>
+      <div class="notif-card">
+        <div class="notif-header">
+          <i class="ph-fill ph-student"></i> Adviser Assignment Decisions
+        </div>
+        <?php foreach ($requestDecisionNotifs as $dn): ?>
+        <div class="notif-item">
+          <div class="notif-row">
+            <span class="notif-code"><?= htmlspecialchars($dn['thesis_code'] ?? 'THESIS') ?></span>
+            <span class="notif-date"><?= date('M j, Y', strtotime($dn['created_at'])) ?></span>
+          </div>
+          <p class="notif-text"><?= htmlspecialchars($dn['message']) ?></p>
+          <div class="notif-author">Adviser: <?= htmlspecialchars(trim(($dn['adviser_first'] ?? '') . ' ' . ($dn['adviser_last'] ?? ''))) ?></div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+
+      <!-- Adviser: In-review theses -->
       <?php if ($user['role'] === 'adviser' && count($adviserNotifs) > 0): ?>
       <div class="alert alert-gold" style="padding: 1.5rem; margin-bottom: 2rem; border-radius: var(--radius-sm); border-left: 5px solid var(--gold);">
-        <h3 style="font-family: 'Playfair Display', serif; font-size: 1.1rem; margin: 0 0 1rem; color: #92400E;"><i class="ph-fill ph-warning-circle"></i> Pending Reviews (<?= count($adviserNotifs) ?>)</h3>
+        <h3 style="font-family: 'Playfair Display', serif; font-size: 1.1rem; margin: 0 0 1rem; color: #92400E;"><i class="ph-fill ph-warning-circle"></i> In Review (<?= count($adviserNotifs) ?>)</h3>
         <?php foreach ($adviserNotifs as $an): ?>
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 0.85rem;">
           <div>
@@ -141,5 +284,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
       </div>
 
     </div>
+
+  </main>
 
 <?php require_once __DIR__ . '/../includes/layout_bottom.php'; ?>

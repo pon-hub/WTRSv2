@@ -3,12 +3,35 @@ require_once __DIR__ . '/../includes/session.php';
 
 // Search query
 $search = trim($_GET['q'] ?? '');
+$sort = $_GET['sort'] ?? 'latest';
 
-// Build query - only show approved theses publicly
+$sortOptions = [
+  'latest' => [
+    'label' => 'LATEST FIRST',
+    'order_sql' => "COALESCE(t.hardbound_received_at, t.updated_at, t.created_at) DESC"
+  ],
+  'oldest' => [
+    'label' => 'OLDEST FIRST',
+    'order_sql' => "COALESCE(t.hardbound_received_at, t.updated_at, t.created_at) ASC"
+  ],
+  'title_az' => [
+    'label' => 'TITLE (A-Z)',
+    'order_sql' => "t.title ASC"
+  ],
+  'most_viewed' => [
+    'label' => 'MOST VIEWED',
+    'order_sql' => "t.views DESC, COALESCE(t.hardbound_received_at, t.updated_at, t.created_at) DESC"
+  ]
+];
+if (!isset($sortOptions[$sort])) {
+  $sort = 'latest';
+}
+
+// Build query - only show published theses publicly
 $sql = "SELECT t.*, u.first_name, u.last_name, u.college 
         FROM theses t
         JOIN users u ON t.author_id = u.id
-        WHERE t.status = 'approved'";
+        WHERE t.status = 'archived'";
 $params = [];
 
 if (!empty($search)) {
@@ -18,14 +41,14 @@ if (!empty($search)) {
   $params['search3'] = "%$search%";
 }
 
-$sql .= " ORDER BY t.created_at DESC";
+$sql .= " ORDER BY " . $sortOptions[$sort]['order_sql'];
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $theses = $stmt->fetchAll();
 
-// Total approved count
-$countStmt = $pdo->query("SELECT COUNT(*) FROM theses WHERE status = 'approved'");
+// Total published count
+$countStmt = $pdo->query("SELECT COUNT(*) FROM theses WHERE status = 'archived'");
 $totalApproved = $countStmt->fetchColumn();
 ?>
 <!DOCTYPE html>
@@ -34,12 +57,13 @@ $totalApproved = $countStmt->fetchColumn();
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Approved Archives - WMSU Repository</title>
+  <title>Published Archives - WMSU Repository</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,800;1,800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <!-- Fonts & Icons -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/nunito.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/playfair-display.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/cormorant-garamond.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/vendor/phosphor/css/phosphor-all.css">
 
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/global.css">
   <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/public.css">
@@ -55,9 +79,10 @@ $totalApproved = $countStmt->fetchColumn();
     <section class="archive-hero">
       <div class="container">
         <h1>A Crimsonian's <span>Wisdom</span></h1>
-        <p>A prestigious digital repository of approved scholarly work from the Western Mindanao State University community.</p>
+        <p>A prestigious digital repository of published scholarly work from the Western Mindanao State University community.</p>
 
         <form action="archive.php" method="GET" class="search-container">
+          <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
           <div class="search-bar-giant">
             <input type="text" name="q" placeholder="Search research title, keywords, or author..." value="<?= htmlspecialchars($search) ?>" autocomplete="off">
             <button type="submit" class="btn btn-primary"><i class="ph ph-magnifying-glass"></i> Explore Archives</button>
@@ -74,7 +99,17 @@ $totalApproved = $countStmt->fetchColumn();
           Found <span><?= count($theses) ?></span> scholarly artifact<?= count($theses) !== 1 ? 's' : '' ?>
         </h2>
         <div class="pub-results-sort">
-          Sort by: <strong>LATEST FIRST</strong>
+          <form method="GET" action="archive.php" class="pub-results-sort-form">
+            <?php if ($search !== ''): ?>
+              <input type="hidden" name="q" value="<?= htmlspecialchars($search) ?>">
+            <?php endif; ?>
+            <span>Sort by:</span>
+            <select name="sort" onchange="this.form.submit()" class="pub-sort-select">
+              <?php foreach ($sortOptions as $key => $opt): ?>
+                <option value="<?= htmlspecialchars($key) ?>" <?= $sort === $key ? 'selected' : '' ?>><?= htmlspecialchars($opt['label']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </form>
         </div>
       </div>
 
@@ -96,7 +131,8 @@ $totalApproved = $countStmt->fetchColumn();
                   <div class="thesis-authors">
                     <span><i class="ph-bold ph-user"></i> <?= htmlspecialchars($thesis['first_name'] . ' ' . $thesis['last_name']) ?></span>
                   </div>
-                  <p class="thesis-abstract"><?= htmlspecialchars(mb_substr($thesis['abstract'], 0, 250)) ?>...</p>
+                  <?php $abs = (string)($thesis['abstract'] ?? ''); ?>
+                  <p class="thesis-abstract"><?= htmlspecialchars(mb_substr($abs, 0, 250)) ?><?= mb_strlen($abs) > 250 ? '...' : '' ?></p>
                   <div class="btn-view">
                     READ MANUSCRIPT <i class="ph-bold ph-arrow-right"></i>
                   </div>
@@ -110,9 +146,9 @@ $totalApproved = $countStmt->fetchColumn();
             <h3>No Research Found</h3>
             <p>
               <?php if (!empty($search)): ?>
-                We couldn't find any approved manuscripts matching "<strong><?= htmlspecialchars($search) ?></strong>". Try adjusting your keywords.
+                We couldn't find any published manuscripts matching "<strong><?= htmlspecialchars($search) ?></strong>". Try adjusting your keywords.
               <?php else: ?>
-                No approved theses have been published yet. Check back soon.
+                No published theses are available yet. Check back soon.
               <?php endif; ?>
             </p>
             <?php if (!empty($search)): ?>
@@ -138,7 +174,7 @@ $totalApproved = $countStmt->fetchColumn();
     <p style="font-size: 0.85rem; color: var(--text-muted);">&copy; <?= date('Y') ?> Western Mindanao State University. Scholarly Repository System.</p>
     <div style="display: flex; justify-content: center; gap: 2rem; margin-top: 2rem;">
       <a href="guidelines.php" style="color: var(--text-muted); font-size: 0.75rem; text-decoration: none; font-weight: 700;">GUIDELINES</a>
-      <a href="about.html" style="color: var(--text-muted); font-size: 0.75rem; text-decoration: none; font-weight: 700;">ABOUT</a>
+      <a href="about.php" style="color: var(--text-muted); font-size: 0.75rem; text-decoration: none; font-weight: 700;">ABOUT</a>
       <a href="<?= BASE_URL ?>auth/login.php" style="color: var(--crimson); font-size: 0.75rem; text-decoration: none; font-weight: 800; letter-spacing: 0.05em;">PORTAL LOGIN</a>
     </div>
   </footer>

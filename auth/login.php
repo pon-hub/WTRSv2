@@ -4,12 +4,14 @@ require_once __DIR__ . '/../includes/session.php';
 $error = null;
 
 // ── Live Stats ──────────────────────────────────────────────────────────────
-$archivedCount   = (int)$pdo->query("SELECT COUNT(*) FROM theses WHERE status = 'approved'")->fetchColumn();
-$researcherCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active'")->fetchColumn();
+$archivedCount = (int) $pdo->query("SELECT COUNT(*) FROM theses WHERE status = 'archived'")->fetchColumn();
+$researcherCount = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active'")->fetchColumn();
 
-function fmt_stat(int $n): string {
-    if ($n >= 1000) return round($n / 1000, 1) . 'k+';
-    return $n > 0 ? $n . '+' : '0';
+function fmt_stat(int $n): string
+{
+  if ($n >= 1000)
+    return round($n / 1000, 1) . 'k+';
+  return $n > 0 ? $n . '+' : '0';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -40,8 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$user || !$validPassword) {
       $error = 'Invalid credentials.';
     } elseif ($user['status'] !== 'active') {
-      $error = 'Your account is not active. Please wait for adviser activation.';
+      $error = 'Your account is not active. Please contact your adviser.';
     } else {
+      // Regenerate session ID to prevent session fixation attacks
+      session_regenerate_id(true);
+
       $_SESSION['user_id'] = $user['id'];
       $_SESSION['user'] = [
         'id' => $user['id'],
@@ -51,9 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'role' => $user['role'],
       ];
 
-      if ($user['role'] === 'admin') {
-        header('Location: ' . BASE_URL . 'admin/users.php');
-      } elseif ($user['role'] === 'adviser') {
+      if ($user['role'] === 'adviser') {
         header('Location: ' . BASE_URL . 'faculty/index.php');
       } else {
         header('Location: ' . BASE_URL . 'student/index.php');
@@ -70,21 +73,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In — WMSU Thesis Repository</title>
+  <title>Sign In — WMSU Repository</title>
 
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Nunito:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,800;1,800&display=swap"
-    rel="stylesheet">
-
-  <!-- Icons -->
-  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <!-- Fonts & Icons -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/nunito.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/playfair-display.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/cormorant-garamond.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/vendor/phosphor/css/phosphor-all.css">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="../assets/css/global.css?v=<?= filemtime(__DIR__ . '/../assets/css/global.css') ?>">
-  <link rel="stylesheet" href="../assets/css/login.css?v=<?= filemtime(__DIR__ . '/../assets/css/login.css') ?>">
+  <link rel="stylesheet"
+    href="<?= BASE_URL ?>assets/css/global.css?v=<?= filemtime(__DIR__ . '/../assets/css/global.css') ?>">
+  <link rel="stylesheet"
+    href="<?= BASE_URL ?>assets/css/login.css?v=<?= filemtime(__DIR__ . '/../assets/css/login.css') ?>">
 </head>
 
 <body class="auth-page">
@@ -138,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <!-- Footer -->
     <div class="auth-footer-text">
-      WTRS
+      Western Mindanao State University
     </div>
 
   </div>
@@ -189,10 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
         </div>
 
-        <div class="remember-group">
-          <input type="checkbox" id="remember" name="remember">
-          <label for="remember">Remember me for 30 days</label>
-        </div>
+
 
         <button type="submit" class="btn-login">
           Sign In to Repository

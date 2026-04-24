@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
-require_login(['admin']);
+require_login(['adviser']);
 
+$user = current_user();
 $flash = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

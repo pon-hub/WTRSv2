@@ -486,31 +486,7 @@ body {
   color: var(--crimson);
 }
 
-/* — Remember me — */
-.remember-group {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 1.5rem;
-}
 
-.remember-group input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--crimson);
-  cursor: pointer;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.remember-group label {
-  font-family: 'Nunito', sans-serif;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-weight: 500;
-  user-select: none;
-}
 
 /* — Sign-in Button — */
 .btn-login {

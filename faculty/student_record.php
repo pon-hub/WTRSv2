@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
-require_login(['adviser', 'admin']);
+require_login(['adviser']);
 
 $user = current_user();
 $student_id = isset($_GET['id']) ? (int)$_GET['id'] : null;
@@ -23,9 +23,9 @@ if (!$student) {
 }
 
 // 2. Fetch All Theses for this Student (Scoped to Adviser)
-$adviserConstraint = ($user['role'] === 'admin') ? "" : "AND t.adviser_id = :adviser_id";
+$adviserConstraint = "AND t.adviser_id = :adviser_id";
 $params = ['author_id' => $student_id];
-if ($user['role'] !== 'admin') $params['adviser_id'] = $user['id'];
+$params['adviser_id'] = $user['id'];
 
 $stmtTheses = $pdo->prepare("
     SELECT t.*, 
@@ -42,6 +42,17 @@ $stmtTheses = $pdo->prepare("
 ");
 $stmtTheses->execute($params);
 $theses = $stmtTheses->fetchAll();
+
+function faculty_record_status_label(string $status): string
+{
+    if ($status === 'pending_review') return 'AWAITING REVIEW';
+    if ($status === 'revision_requested') return 'REVISION REQUIRED';
+    if ($status === 'approved') return 'ACCEPTED';
+    if ($status === 'archived') return 'PUBLISHED';
+    if ($status === 'rejected') return 'REJECTED';
+    if ($status === 'draft') return 'AWAITING ADVISER';
+    return strtoupper(str_replace('_', ' ', $status));
+}
 
 // 3. Stats for this specific student
 $stats = [
@@ -118,7 +129,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
            <div class="stat-mini-val"><?= $stats['total'] ?></div>
         </div>
         <div class="stat-card-mini">
-           <span class="stat-mini-label">VERIFIED & APPROVED</span>
+           <span class="stat-mini-label">ACCEPTED</span>
            <div class="stat-mini-val" style="color: #065F46;"><?= $stats['approved'] ?></div>
         </div>
         <div class="stat-card-mini">
@@ -161,11 +172,13 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                   <?php if ($th['status'] === 'pending_review'): ?>
                     <span class="badge badge-pending"><span class="dot dot-pending"></span> AWAITING REVIEW</span>
                   <?php elseif ($th['status'] === 'approved'): ?>
-                    <span class="badge badge-approved"><span class="dot dot-approved"></span> APPROVED</span>
+                    <span class="badge badge-approved"><span class="dot dot-approved"></span> ACCEPTED</span>
+                  <?php elseif ($th['status'] === 'archived'): ?>
+                    <span class="badge badge-approved"><span class="dot dot-approved"></span> PUBLISHED</span>
                   <?php elseif ($th['status'] === 'revision_requested'): ?>
-                    <span class="badge badge-revision"><span class="dot dot-revision"></span> REVISION</span>
+                    <span class="badge badge-revision"><span class="dot dot-revision"></span> REVISION REQUIRED</span>
                   <?php else: ?>
-                    <span class="badge badge-default"><?= strtoupper($th['status']) ?></span>
+                    <span class="badge badge-default"><?= faculty_record_status_label($th['status']) ?></span>
                   <?php endif; ?>
 
                   <a href="<?= BASE_URL ?>faculty/review.php?id=<?= $th['id'] ?>" class="btn-action-outline" style="text-decoration:none; padding: 0.6rem 1.25rem; color: var(--crimson); border-color: var(--crimson); font-size: 0.75rem; font-weight: 800;">

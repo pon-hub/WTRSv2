@@ -3,7 +3,8 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-$isLoggedIn = isset($_SESSION['user']);
+$sessionRole = $_SESSION['user']['role'] ?? null;
+$isLoggedIn = !empty($_SESSION['user_id']) && in_array($sessionRole, ['student', 'adviser'], true);
 $currentFile = basename($_SERVER['PHP_SELF']);
 ?>
 <header class="pub-navbar">
@@ -12,7 +13,14 @@ $currentFile = basename($_SERVER['PHP_SELF']);
     <!-- Logo -->
     <div class="nav-left">
       <a href="<?= BASE_URL ?>public/archive.php" class="pub-logo">
-        <i class="ph-fill ph-books"></i>
+        <div class="brand-seal-box">
+          <img src="<?= BASE_URL ?>assets/images/wmsu-logo.png" alt="WMSU Logo"
+            width="28" height="28"
+            style="width:28px;height:28px;display:block;object-fit:contain;"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+          <span
+            style="display:none; font-size:0.45rem; font-weight:800; color:#8B0000; text-align:center; line-height:1.2;">WMSU</span>
+        </div>
         <span>WMSU <span style="font-weight:400; opacity:0.7;">Repository</span></span>
       </a>
     </div>
@@ -27,9 +35,9 @@ $currentFile = basename($_SERVER['PHP_SELF']);
     <!-- Auth Actions -->
     <div class="nav-right">
       <?php if ($isLoggedIn): 
-          $role = $_SESSION['user']['role'];
+          $role = $sessionRole;
           $portalFolder = ($role === 'adviser') ? 'faculty' : $role;
-          $homePage = ($role === 'admin') ? 'users.php' : 'index.php';
+          $homePage = 'index.php';
           $portalHome = BASE_URL . $portalFolder . '/' . $homePage;
       ?>
         <a href="<?= $portalHome ?>" class="nav-btn-solid">

@@ -3,6 +3,60 @@ require_once __DIR__ . '/../includes/session.php';
 require_login(['student']);
 
 $user = current_user();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_thesis_id'])) {
+    $tid = (int) $_POST['delete_thesis_id'];
+    if ($tid <= 0) {
+        header('Location: index.php?view=submissions&err=invalid');
+        exit;
+    }
+
+    $check = $pdo->prepare('SELECT id, status, author_id FROM theses WHERE id = ?');
+    $check->execute([$tid]);
+    $row = $check->fetch(PDO::FETCH_ASSOC);
+
+    if (!$row || (int) $row['author_id'] !== (int) $user['id']) {
+        header('Location: index.php?view=submissions&err=forbidden');
+        exit;
+    }
+
+    $nonDeletable = ['approved', 'archived'];
+    if (in_array($row['status'], $nonDeletable, true)) {
+        header('Location: index.php?view=submissions&err=locked');
+        exit;
+    }
+
+    $vStmt = $pdo->prepare('SELECT file_path FROM thesis_versions WHERE thesis_id = ?');
+    $vStmt->execute([$tid]);
+    $paths = $vStmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $uploadDir = realpath(__DIR__ . '/../public/uploads');
+    if ($uploadDir && $paths) {
+        foreach ($paths as $fp) {
+            $base = basename((string) $fp);
+            if ($base === '' || $base === '.' || $base === '..') {
+                continue;
+            }
+            $full = $uploadDir . DIRECTORY_SEPARATOR . $base;
+            if (strpos($full, $uploadDir) === 0 && is_file($full)) {
+                @unlink($full);
+            }
+        }
+    }
+
+    $del = $pdo->prepare('DELETE FROM theses WHERE id = ? AND author_id = ?');
+    $del->execute([$tid, $user['id']]);
+
+    header('Location: index.php?view=submissions&deleted=1');
+    exit;
+}
+
+$dashFlash = null;
+if (!empty($_SESSION['student_dash_flash'])) {
+    $dashFlash = $_SESSION['student_dash_flash'];
+    unset($_SESSION['student_dash_flash']);
+}
+
 $view = $_GET['view'] ?? 'overview';
 
 // Fetch ALL theses by the student
@@ -166,6 +220,67 @@ ob_start();
   .timeline-icon-wrap { position: absolute; top: -4px; left: 9px; width: 50px; height: 50px; border-radius: 50%; background: var(--surface); border: 4px solid var(--border); display: flex; align-items: center; justify-content: center; z-index: 2; color: var(--text-muted); font-size: 1.4rem; }
   .timeline-item.active .timeline-icon-wrap { border-color: var(--gold); background: var(--gold-faint); color: var(--gold); box-shadow: 0 0 0 6px white; }
   .timeline-item.completed .timeline-icon-wrap { border-color: var(--crimson); background: var(--crimson); color: white; box-shadow: 0 0 0 6px white; }
+
+  .submissions-flash {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    margin: 0 1.5rem 1.25rem;
+    padding: 0.9rem 1.1rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1.45;
+  }
+  .submissions-flash i { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.05rem; }
+  .submissions-flash--ok {
+    background: #D1FAE5;
+    color: #065F46;
+    border: 1px solid #6EE7B7;
+  }
+  .submissions-flash--err {
+    background: #FEE2E2;
+    color: #991B1B;
+    border: 1px solid #FECACA;
+  }
+
+  .submission-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .submission-delete-form { display: inline; margin: 0; padding: 0; }
+  .btn-action-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.85rem;
+    font-family: var(--font-base);
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #991B1B;
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .btn-action-danger:hover {
+    background: #FEE2E2;
+    border-color: #F87171;
+  }
+  .submission-delete-na {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    color: var(--text-muted);
+    opacity: 0.55;
+    font-size: 1.1rem;
+  }
 </style>
 <?php
 $extraCss = ob_get_clean();
@@ -199,6 +314,13 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
       </div>
     </div>
 
+    <?php if (!empty($dashFlash)): ?>
+      <div class="submissions-flash <?= ($dashFlash['type'] ?? '') === 'success' ? 'submissions-flash--ok' : 'submissions-flash--err' ?>" role="status" style="margin: 0 0 1.5rem;">
+        <i class="ph-bold <?= ($dashFlash['type'] ?? '') === 'success' ? 'ph-check-circle' : 'ph-warning-circle' ?>"></i>
+        <span><?= htmlspecialchars($dashFlash['message'] ?? '') ?></span>
+      </div>
+    <?php endif; ?>
+
     <?php if ($view === 'submissions'): ?>
       <!-- ── ALL SUBMISSIONS VIEW ────────────────────────────────────────── -->
       <div class="table-container">
@@ -208,6 +330,26 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
             <p>List of all research manuscripts you have submitted to the repository.</p>
           </div>
         </div>
+
+        <?php
+        $subFlash = $_GET['deleted'] ?? '';
+        $subErr = $_GET['err'] ?? '';
+        if ($subFlash === '1'): ?>
+          <div class="submissions-flash submissions-flash--ok" role="status">
+            <i class="ph-bold ph-check-circle"></i>
+            <span>That submission and its uploaded files were removed.</span>
+          </div>
+        <?php elseif ($subErr === 'locked'): ?>
+          <div class="submissions-flash submissions-flash--err" role="alert">
+            <i class="ph-bold ph-lock-key"></i>
+            <span>Approved or archived theses cannot be deleted. Contact support if you need changes.</span>
+          </div>
+        <?php elseif ($subErr === 'forbidden' || $subErr === 'invalid'): ?>
+          <div class="submissions-flash submissions-flash--err" role="alert">
+            <i class="ph-bold ph-warning-circle"></i>
+            <span>Could not delete that submission. Refresh the page and try again.</span>
+          </div>
+        <?php endif; ?>
 
         <?php if (empty($allTheses)): ?>
           <div class="empty-state">
@@ -248,9 +390,27 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                       <?= date('M j, Y', strtotime($t['updated_at'] ?? $t['created_at'])) ?>
                     </td>
                     <td style="text-align: center;">
-                       <a href="index.php?id=<?= $t['id'] ?>" class="btn-action-outline">
-                         <i class="ph-bold ph-eye"></i> View
-                       </a>
+                      <div class="submission-actions">
+                        <a href="tracker.php?id=<?= (int) $t['id'] ?>" class="btn-action-outline">
+                          <i class="ph-bold ph-eye"></i> View
+                        </a>
+                        <?php
+                        $canDelete = !in_array($t['status'], ['approved', 'archived'], true);
+                        ?>
+                        <?php if ($canDelete): ?>
+                          <form method="post" action="index.php?view=submissions" class="submission-delete-form"
+                            onsubmit="return confirm('Delete this submission and all of its uploaded PDF versions? This cannot be undone.');">
+                            <input type="hidden" name="delete_thesis_id" value="<?= (int) $t['id'] ?>">
+                            <button type="submit" class="btn-action-danger" title="Delete submission">
+                              <i class="ph-bold ph-trash"></i> Delete
+                            </button>
+                          </form>
+                        <?php else: ?>
+                          <span class="submission-delete-na" title="Approved or archived records cannot be deleted">
+                            <i class="ph-bold ph-lock-key"></i>
+                          </span>
+                        <?php endif; ?>
+                      </div>
                     </td>
                   </tr>
                 <?php endforeach; ?>

@@ -68,10 +68,10 @@ $backupLogs = $logStmt->fetchAll();
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>System Backups - WTRS Admin</title>
   
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="stylesheet" href="../assets/fonts/google/css/nunito.css">
+  <link rel="stylesheet" href="../assets/fonts/google/css/playfair-display.css">
+  <link rel="stylesheet" href="../assets/fonts/google/css/cormorant-garamond.css">
+  <link rel="stylesheet" href="../assets/vendor/phosphor/css/phosphor-all.css">
 
   <link rel="stylesheet" href="../assets/css/global.css">
   <link rel="stylesheet" href="../assets/css/dashboard.css">

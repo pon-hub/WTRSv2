@@ -24,7 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if (!$user) {
-            $error = 'No account found with that email address.';
+            // Generic message to prevent email enumeration
+            $success = 'If an account exists with that email, your password has been reset. Try signing in with your new password.';
         } else {
             // Update password
             $hash = password_hash($new_password, PASSWORD_BCRYPT);
@@ -36,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $logStmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action_type, description, ip_address) VALUES (?, 'password_reset', 'Password was reset via forgot password form', ?)");
             $logStmt->execute([$user['id'], $ip]);
 
-            $success = 'Your password has been reset successfully. You can now sign in with your new password.';
+            $success = 'If an account exists with that email, your password has been reset. Try signing in with your new password.';
         }
     }
 }
@@ -47,12 +48,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reset Password - WMSU Thesis Repository</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/@phosphor-icons/web"></script>
-  <link rel="stylesheet" href="../assets/css/global.css">
-  <link rel="stylesheet" href="../assets/css/login.css">
+  <!-- Fonts & Icons -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/nunito.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/playfair-display.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/fonts/google/css/cormorant-garamond.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/vendor/phosphor/css/phosphor-all.css">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/global.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/login.css">
 </head>
 <body class="auth-page">
 

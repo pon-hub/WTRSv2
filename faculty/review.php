@@ -1,26 +1,28 @@
 <?php
 require_once __DIR__ . '/../includes/session.php';
-require_login(['adviser', 'admin']);
+require_login(['adviser']);
 
 $user = current_user();
 $thesis_id = isset($_GET['id']) ? (int)$_GET['id'] : null;
 
+function faculty_status_label(string $status): string
+{
+    if ($status === 'pending_review') return 'Pending Adviser Approval';
+    if ($status === 'revision_requested') return 'Needs Revision';
+    if ($status === 'approved') return 'Accepted';
+    if ($status === 'archived') return 'Published';
+    if ($status === 'rejected') return 'Rejected';
+    if ($status === 'draft') return 'Awaiting Adviser';
+    return ucwords(str_replace('_', ' ', $status));
+}
+
 // ─── DETAIL VIEW ───────────────────────────────────────────────────────────────
 if ($thesis_id) {
-    // If Admin, they can see everything. If Adviser, only their assigned ones.
-    if ($user['role'] === 'admin') {
-        $stmt = $pdo->prepare("SELECT t.*, u.first_name, u.last_name, u.college
-                               FROM theses t
-                               JOIN users u ON t.author_id = u.id
-                               WHERE t.id = :id");
-        $stmt->execute(['id' => $thesis_id]);
-    } else {
-        $stmt = $pdo->prepare("SELECT t.*, u.first_name, u.last_name, u.college
-                               FROM theses t
-                               JOIN users u ON t.author_id = u.id
-                               WHERE t.id = :id AND t.adviser_id = :adviser_id");
-        $stmt->execute(['id' => $thesis_id, 'adviser_id' => $user['id']]);
-    }
+    $stmt = $pdo->prepare("SELECT t.*, u.first_name, u.last_name, u.college
+                           FROM theses t
+                           JOIN users u ON t.author_id = u.id
+                           WHERE t.id = :id AND t.adviser_id = :adviser_id");
+    $stmt->execute(['id' => $thesis_id, 'adviser_id' => $user['id']]);
     $thesis = $stmt->fetch();
 
     if (!$thesis) {
@@ -36,7 +38,51 @@ if ($thesis_id) {
     $error = null;
     $success = null;
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && $latestVersion && $latestVersion['status'] === 'pending') {
+    // --- Auto-mark Notifications as Read ---
+    if ($thesis['status'] === 'draft') {
+        $markReadStmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE recipient_user_id = :recipient_id AND thesis_id = :thesis_id AND type = 'thesis_request'");
+        $markReadStmt->execute(['recipient_id' => $user['id'], 'thesis_id' => $thesis_id]);
+    }
+
+    // --- ADVISER EDIT: Accept/Decline Request ---
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_action'])) {
+        $action = $_POST['request_action'];
+        if (in_array($action, ['accept_request', 'decline_request'], true)) {
+            $pdo->beginTransaction();
+            try {
+                if ($action === 'accept_request') {
+                    $updT = $pdo->prepare("UPDATE theses SET status = 'pending_review', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+                    $updT->execute([$thesis_id]);
+                    $thesis['status'] = 'pending_review';
+                    $studentMsg = "Your thesis request was accepted by Prof. " . $user['last_name'] . ". Review has started.";
+                    $success = "Thesis request accepted. It is now in your review queue.";
+                } else {
+                    $updT = $pdo->prepare("UPDATE theses SET adviser_id = NULL, status = 'draft', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+                    $updT->execute([$thesis_id]);
+                    $thesis['status'] = 'draft';
+                    $thesis['adviser_id'] = null; // Important to reflect in UI
+                    $studentMsg = "Your thesis request was declined by Prof. " . $user['last_name'] . ". Please choose another adviser.";
+                    $success = "Thesis request declined. The student has been notified.";
+                }
+
+                $pdo->prepare("INSERT INTO notifications (recipient_user_id, sender_user_id, thesis_id, type, message) VALUES (?, ?, ?, 'thesis_request_decision', ?)")
+                    ->execute([$thesis['author_id'], $user['id'], $thesis_id, $studentMsg]);
+
+                $pdo->commit();
+                
+                // If declined, the adviser shouldn't see this anymore. Redirect to index.
+                if ($action === 'decline_request') {
+                    header("Location: " . BASE_URL . "faculty/index.php");
+                    exit;
+                }
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                $error = "Transaction failed: " . $e->getMessage();
+            }
+        }
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['request_action']) && $latestVersion && $latestVersion['status'] === 'pending') {
         $action   = $_POST['action'] ?? '';
         $feedback = trim($_POST['feedback'] ?? '');
 
@@ -45,6 +91,10 @@ if ($thesis_id) {
         } elseif (empty($feedback) && in_array($action, ['revision_requested', 'rejected'])) {
             $error = "Constructive feedback is mandatory for requesting revisions or rejections.";
         } else {
+            // Auto-fill feedback for approvals if adviser left it empty
+            if (empty($feedback) && $action === 'approved') {
+                $feedback = 'Your manuscript has been verified and approved for publication in the repository. Congratulations!';
+            }
             $pdo->beginTransaction();
             try {
                 // Map internal status for versioning
@@ -55,19 +105,33 @@ if ($thesis_id) {
                 $updV->execute([$versionStatus, $feedback, $latestVersion['id']]);
 
                 // 2. Update Thesis Master Status
+                // "Accept" (approved) action maps to 'approved' (Needs editorial polish)
+                // instead of immediate 'archived'.
+                $thesisStatus = $action;
                 $updT = $pdo->prepare("UPDATE theses SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
-                $updT->execute([$action, $thesis_id]);
+                $updT->execute([$thesisStatus, $thesis_id]);
 
                 // 3. Log Activity
                 $logMsg = "Faculty review processed: '$action' for artifact {$thesis['thesis_code']}";
                 $pdo->prepare("INSERT INTO activity_logs (user_id, action_type, description, ip_address) VALUES (?, 'review', ?, ?)")
                     ->execute([$user['id'], $logMsg, $_SERVER['REMOTE_ADDR']]);
 
+                // 4. Notify the student about the decision
+                $decisionMsgs = [
+                    'approved'           => "Your thesis has been Accepted.",
+                    'revision_requested' => "Revision requested: " . (mb_strlen($feedback) > 50 ? mb_substr($feedback, 0, 50) . '...' : $feedback),
+                    'rejected'           => "Thesis rejected."
+                ];
+                $studentMsg = $decisionMsgs[$action] ?? ("Update on your thesis: " . $action);
+                
+                $pdo->prepare("INSERT INTO notifications (recipient_user_id, sender_user_id, thesis_id, type, message) VALUES (?, ?, ?, 'thesis_review_decision', ?)")
+                    ->execute([$thesis['author_id'], $user['id'], $thesis_id, $studentMsg]);
+
                 $pdo->commit();
                 $success = "Review processed successfully.";
 
                 // Update local vars for immediate UI reflection
-                $thesis['status'] = $action;
+                $thesis['status'] = $thesisStatus;
                 $latestVersion['status'] = $versionStatus;
                 $latestVersion['feedback'] = $feedback;
 
@@ -75,6 +139,49 @@ if ($thesis_id) {
                 $pdo->rollBack();
                 $error = "Transaction failed: " . $e->getMessage();
             }
+        }
+    }
+
+    // --- ADVISER EDIT: Update Metadata (only if approved/accepted) ---
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_metadata' && $thesis['status'] === 'approved') {
+        $newTitle = trim($_POST['title'] ?? '');
+        $newAbstract = trim($_POST['abstract'] ?? '');
+        
+        if (empty($newTitle)) {
+            $error = "Thesis title cannot be empty.";
+        } else {
+            $updMeta = $pdo->prepare("UPDATE theses SET title = ?, abstract = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+            if ($updMeta->execute([$newTitle, $newAbstract, $thesis_id])) {
+                $thesis['title'] = $newTitle;
+                $thesis['abstract'] = $newAbstract;
+                $success = "Archival metadata refined successfully.";
+                
+                // Log activity
+                $pdo->prepare("INSERT INTO activity_logs (user_id, action_type, description, ip_address) VALUES (?, 'edit', ?, ?)")
+                    ->execute([$user['id'], "Refined manuscript metadata for {$thesis['thesis_code']}", $_SERVER['REMOTE_ADDR']]);
+            } else {
+                $error = "Failed to update metadata.";
+            }
+        }
+    }
+
+    // --- ADVISER EDIT: Publish Artifact ---
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'publish_artifact' && $thesis['status'] === 'approved') {
+        $updPub = $pdo->prepare("UPDATE theses SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+            if ($updPub->execute([$thesis_id])) {
+                $thesis['status'] = 'archived';
+                $success = "Scholarly artifact has been formally published to the repository.";
+                
+                // Notify student
+                $studentMsg = "Your thesis has been formally published to the Institutional Repository.";
+                $pdo->prepare("INSERT INTO notifications (recipient_user_id, sender_user_id, thesis_id, type, message) VALUES (?, ?, ?, 'thesis_published', ?)")
+                    ->execute([$thesis['author_id'], $user['id'], $thesis_id, $studentMsg]);
+                
+            // Log activity
+            $pdo->prepare("INSERT INTO activity_logs (user_id, action_type, description, ip_address) VALUES (?, 'publish', ?, ?)")
+                ->execute([$user['id'], "Formally published artifact {$thesis['thesis_code']}", $_SERVER['REMOTE_ADDR']]);
+        } else {
+            $error = "Failed to publish artifact.";
         }
     }
 
@@ -300,15 +407,29 @@ if ($thesis_id) {
 
             <h3 style="font-family: var(--font-serif); font-size: 1.2rem; margin-bottom: 1rem;">Formal Evaluation</h3>
             
-            <?php if ($latestVersion && $latestVersion['status'] === 'pending' && $thesis['status'] === 'pending_review'): ?>
+            <?php if ($thesis['status'] === 'draft'): ?>
+               <div style="background: var(--off-white); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 1.75rem; margin-bottom: 2rem;">
+                  <h4 style="font-family: var(--font-serif); font-size: 1.1rem; color: var(--crimson); margin-bottom: 1.25rem;">Pending Advisory Request</h4>
+                  <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1.5rem;">The student has requested you as their research adviser. Please review the manuscript details before accepting or declining.</p>
+                  
+                  <form action="" method="POST" style="display: flex; gap: 1rem; flex-direction: column;">
+                     <button type="submit" name="request_action" value="accept_request" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 0.85rem; letter-spacing: 0.05em; background: #065F46; border-color: #065F46; box-shadow: var(--shadow-sm);">
+                        ACCEPT REQUEST
+                     </button>
+                     <button type="submit" name="request_action" value="decline_request" class="btn btn-secondary" style="width: 100%; padding: 1rem; font-size: 0.85rem; letter-spacing: 0.05em; color: #B91C1C; box-shadow: var(--shadow-sm);">
+                        DECLINE REQUEST
+                     </button>
+                  </form>
+               </div>
+            <?php elseif ($latestVersion && $latestVersion['status'] === 'pending' && $thesis['status'] === 'pending_review'): ?>
                <form action="" method="POST">
                   <div style="margin-bottom: 1.5rem;">
                      <label style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem;">Decision Decree</label>
                      <select name="action" required style="width: 100%; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-strong); font-family: var(--font-base); font-weight: 700;">
                         <option value="">Select scholarly verdict...</option>
-                        <option value="approved">VERIFY & APPROVE ARCHIVAL</option>
-                        <option value="revision_requested">REFINE MANUSCRIPT (REVISION)</option>
-                        <option value="rejected">FORMAL REJECTION</option>
+                        <option value="approved">ACCEPT</option>
+                        <option value="revision_requested">REQUEST REVISION</option>
+                        <option value="rejected">REJECT</option>
                      </select>
                   </div>
 
@@ -322,6 +443,39 @@ if ($thesis_id) {
                      FINALIZE SCHOLARLY DECISION
                   </button>
                </form>
+            <?php elseif ($thesis['status'] === 'approved'): ?>
+               <!-- EDIT METADATA SECTION -->
+               <div style="background: var(--off-white); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 1.75rem; margin-bottom: 2rem;">
+                  <h4 style="font-family: var(--font-serif); font-size: 1.1rem; color: var(--crimson); margin-bottom: 1.25rem;">Editorial Refinement</h4>
+                  <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1.5rem;">As the supervisor, you may now refine the scholarship metadata before formal publication.</p>
+                  
+                  <form action="" method="POST">
+                     <input type="hidden" name="action" value="update_metadata">
+                     <div style="margin-bottom: 1.25rem;">
+                        <label style="display: block; font-size: 0.6rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem;">Scholarly Title</label>
+                        <input type="text" name="title" value="<?= htmlspecialchars($thesis['title']) ?>" required style="width: 100%; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border); font-family: var(--font-serif); font-size: 0.9rem;">
+                     </div>
+                     <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-size: 0.6rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem;">Abstract / Executive Summary</label>
+                        <textarea name="abstract" rows="6" style="width: 100%; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border); font-family: var(--font-serif); font-size: 0.85rem; line-height: 1.5;"><?= htmlspecialchars($thesis['abstract']) ?></textarea>
+                     </div>
+                     <button type="submit" class="btn btn-secondary" style="width: 100%; padding: 0.8rem; font-size: 0.75rem; font-weight: 800;">SAVE EDITORIAL CHANGES</button>
+                  </form>
+               </div>
+
+               <div style="background: var(--crimson-faint); border: 2px solid var(--crimson); border-radius: var(--radius-sm); padding: 1.75rem; text-align: center;">
+                  <i class="ph-fill ph-check-circle" style="font-size: 2.5rem; color: var(--crimson);"></i>
+                  <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Accepted for Archival</h4>
+                  <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1.5rem;">Peer review is complete. Ready for formal institutional publication.</p>
+                  
+                  <form action="" method="POST">
+                     <input type="hidden" name="action" value="publish_artifact">
+                     <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1.25rem; font-size: 0.9rem; letter-spacing: 0.1em; background: var(--crimson);">
+                        PUBLISH TO ARCHIVE
+                     </button>
+                  </form>
+               </div>
+
             <?php else: ?>
                <div style="background: var(--off-white); border-radius: var(--radius-sm); padding: 2rem; text-align: center; border: 2px dashed var(--border-strong);">
                   <i class="ph-bold ph-seal-check" style="font-size: 2.5rem; color: var(--crimson); opacity: 0.4;"></i>
@@ -357,10 +511,9 @@ $search       = trim($_GET['search'] ?? '');
 $params = [];
 $where  = [];
 
-if ($user['role'] !== 'admin') {
-    $where[] = "t.adviser_id = :adviser_id";
-    $params['adviser_id'] = $user['id'];
-}
+$where[] = "t.adviser_id = :adviser_id";
+$params['adviser_id'] = $user['id'];
+$where[] = "t.status <> 'draft'";
 
 if ($filterStatus !== 'all') {
     $where[] = "t.status = :status";
@@ -385,15 +538,14 @@ $thesesStmt = $pdo->prepare("
         ORDER BY submitted_at DESC LIMIT 1
     )
     $whereClause
-    ORDER BY tv.submitted_at DESC
+    ORDER BY COALESCE(tv.submitted_at, t.created_at) DESC
 ");
 $thesesStmt->execute($params);
 $theses = $thesesStmt->fetchAll();
 
 // Filter summaries
-$countStmt = $pdo->prepare("SELECT status, COUNT(*) AS cnt FROM theses " . ($user['role'] === 'admin' ? "" : "WHERE adviser_id = :id") . " GROUP BY status");
-if ($user['role'] !== 'admin') $countStmt->execute(['id' => $user['id']]);
-else $countStmt->execute();
+$countStmt = $pdo->prepare("SELECT status, COUNT(*) AS cnt FROM theses WHERE adviser_id = :id GROUP BY status");
+$countStmt->execute(['id' => $user['id']]);
 $counts = $countStmt->fetchAll(PDO::FETCH_KEY_PAIR);
 $totalInQueue = array_sum($counts);
 
@@ -417,9 +569,9 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
         <?php
           $tabs = [
             'all'                => 'All Artifacts',
-            'pending_review'     => 'Pending',
-            'approved'           => 'Approved',
-            'revision_requested' => 'Revision',
+            'pending_review'     => 'In Review',
+            'approved'           => 'Accepted',
+            'revision_requested' => 'Revision Required',
             'rejected'           => 'Rejected'
           ];
           foreach ($tabs as $k => $l):
@@ -462,6 +614,9 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <td style="padding-left: 2rem;">
                  <span class="thesis-code-tag"><?= htmlspecialchars($t['thesis_code']) ?></span>
                  <div style="font-weight: 800; color: var(--text-dark); margin-top: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 450px;"><?= htmlspecialchars($t['title']) ?></div>
+                 <div style="margin-top: 0.35rem; font-size: 0.7rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">
+                   <?= htmlspecialchars(faculty_status_label($t['status'])) ?>
+                 </div>
               </td>
               <td>
                  <div class="student-cell">
