@@ -45,6 +45,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <a href="<?= BASE_URL ?>faculty/students.php" class="menu-item <?= ($current_page == 'students.php') ? 'active' : '' ?>">
           <i class="ph-fill ph-users"></i> Students
         </a>
+        <a href="<?= BASE_URL ?>faculty/requests.php" class="menu-item <?= ($current_page == 'requests.php') ? 'active' : '' ?>">
+          <i class="ph-fill ph-user-plus"></i> Advisee Requests
+        </a>
         <a href="<?= BASE_URL ?>faculty/review.php?status=approved" class="menu-item <?= ($current_page == 'review.php' && ($_GET['status'] ?? '') == 'approved') ? 'active' : '' ?>">
           <i class="ph-fill ph-archive"></i> Archives
         </a>

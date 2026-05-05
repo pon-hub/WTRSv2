@@ -1,0 +1,5 @@
+public/uploads/*.pdf
+scratch/
+error.log
+*.zip
+output_test_register.html

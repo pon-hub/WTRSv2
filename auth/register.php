@@ -32,13 +32,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $student_id = trim($_POST['student_id'] ?? '');
   $course = trim($_POST['course'] ?? '');
   $year_level = trim($_POST['year_level'] ?? '');
+  $preferred_adviser = $_POST['preferred_adviser'] ?? null;
   $password = $_POST['password'] ?? '';
   $confirm_password = $_POST['confirm_password'] ?? '';
 
   if (!$first_name || !$last_name || !$email || !$password || !$confirm_password || !$college) {
     $error = 'Please fill in all required fields.';
-  } elseif ($role === 'student' && (!$student_id || !$course || !$year_level)) {
-    $error = 'Please fill in all student details (Student ID, Course, Year Level).';
+  } elseif ($role === 'student' && (!$student_id || !$course || !$year_level || !$preferred_adviser)) {
+    $error = 'Please fill in all student details including preferred adviser.';
   } elseif ($password !== $confirm_password) {
     $error = 'Passwords do not match.';
   } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -70,6 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'year_level' => $role === 'student' ? $year_level : null,
         'status' => $initialStatus,
       ]);
+
+      $new_user_id = $pdo->lastInsertId();
+
+      if ($role === 'student' && $preferred_adviser) {
+        $reqStmt = $pdo->prepare('INSERT INTO adviser_requests (student_id, adviser_id, status) VALUES (?, ?, "pending")');
+        $reqStmt->execute([$new_user_id, $preferred_adviser]);
+      }
 
       $success = 'Registration successful. You can now sign in.';
 
@@ -256,6 +264,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               </select>
             </div>
           </div>
+          
+          <div class="input-group" style="margin-top: 1.5rem; margin-bottom: 0;">
+            <div class="input-header"><span class="input-label" style="font-size: 0.65rem;">PREFERRED ADVISER</span></div>
+            <select name="preferred_adviser" id="preferred_adviser" class="select-plain">
+              <option value="">Select college first</option>
+            </select>
+            <span class="password-hint" style="margin-top: 0.35rem; display: block;">Advisers with full capacity cannot be selected.</span>
+          </div>
         </div>
 
         <div class="form-grid-2">
@@ -324,6 +340,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     const roleSelect = document.querySelector('select[name="role"]');
     const studentSection = document.getElementById('student_details_section');
+    const collegeSelect = document.querySelector('select[name="college"]');
+    const adviserSelect = document.getElementById('preferred_adviser');
+
     if (roleSelect && studentSection) {
       roleSelect.addEventListener('change', function() {
         if (this.value === 'student') {
@@ -332,6 +351,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           studentSection.style.display = 'none';
         }
       });
+    }
+
+    if (collegeSelect && adviserSelect) {
+      collegeSelect.addEventListener('change', function() {
+        const college = this.value;
+        adviserSelect.innerHTML = '<option value="">Loading advisers...</option>';
+        
+        if (!college) {
+          adviserSelect.innerHTML = '<option value="">Select college first</option>';
+          return;
+        }
+
+        fetch(`../api/get_advisers.php?college=${encodeURIComponent(college)}`)
+          .then(response => response.json())
+          .then(data => {
+            if (data.success && data.advisers.length > 0) {
+              adviserSelect.innerHTML = '<option value="">Select a preferred adviser</option>';
+              data.advisers.forEach(adv => {
+                const opt = document.createElement('option');
+                opt.value = adv.id;
+                opt.textContent = `${adv.name} (${adv.current}/${adv.max} Advisees)`;
+                if (adv.is_full) {
+                  opt.disabled = true;
+                  opt.textContent += ' - FULL';
+                }
+                adviserSelect.appendChild(opt);
+              });
+            } else {
+              adviserSelect.innerHTML = '<option value="">No active advisers found in this college</option>';
+            }
+          })
+          .catch(err => {
+            console.error(err);
+            adviserSelect.innerHTML = '<option value="">Error loading advisers</option>';
+          });
+      });
+
+      // Trigger change on load if college is pre-selected (e.g., after validation error)
+      if (collegeSelect.value) {
+        collegeSelect.dispatchEvent(new Event('change'));
+      }
     }
   </script>
 </body>

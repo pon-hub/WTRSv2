@@ -4,6 +4,16 @@ require_login(['adviser']);
 
 $user   = current_user();
 $search = trim($_GET['search'] ?? '');
+$msg = $_GET['msg'] ?? '';
+
+// Handle student removal
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['remove_student_id'])) {
+    $sid = (int)$_POST['remove_student_id'];
+    $pdo->prepare("UPDATE users SET adviser_id = NULL WHERE id = ? AND adviser_id = ? AND role = 'student'")->execute([$sid, $user['id']]);
+    $pdo->prepare("DELETE FROM adviser_requests WHERE student_id = ? AND adviser_id = ? AND status = 'approved'")->execute([$sid, $user['id']]);
+    header("Location: students.php?msg=removed");
+    exit;
+}
 
 // ── DATA FETCHING ────────────────────────────────────────────────────────────
 
@@ -15,8 +25,6 @@ if ($search !== '') {
     $searchClause     = "AND (u.first_name LIKE :search OR u.last_name LIKE :search OR u.college LIKE :search OR u.course LIKE :search OR u.student_id LIKE :search)";
     $params['search'] = '%' . $search . '%';
 }
-
-$adviserConstraint = "AND t.adviser_id = :adviser_id";
 
 $stmt = $pdo->prepare("
     SELECT
@@ -32,11 +40,13 @@ $stmt = $pdo->prepare("
         MAX(tv.submitted_at)              AS last_activity,
         SUM(t.status = 'approved')        AS approved_count,
         SUM(t.status = 'pending_review')  AS pending_count,
-        SUM(t.status = 'revision_requested') AS revision_count
+        SUM(t.status = 'revision_requested') AS revision_count,
+        MAX(ar.updated_at)                AS advisee_since
     FROM users u
-    JOIN theses t  ON t.author_id  = u.id $adviserConstraint
+    LEFT JOIN theses t  ON t.author_id  = u.id
     LEFT JOIN thesis_versions tv ON tv.thesis_id = t.id
-    WHERE u.role = 'student'
+    LEFT JOIN adviser_requests ar ON ar.student_id = u.id AND ar.adviser_id = u.adviser_id AND ar.status = 'approved'
+    WHERE u.role = 'student' AND u.adviser_id = :adviser_id
     $searchClause
     GROUP BY u.id, u.first_name, u.last_name, u.college, u.course, u.year_level, u.student_id, u.email
     ORDER BY last_activity DESC
@@ -72,6 +82,12 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
     </div>
 
     <!-- Controls -->
+    <?php if ($msg === 'removed'): ?>
+      <div class="alert alert-success" style="background:#D1FAE5; color:#065F46; padding:1rem; border-radius:4px; margin-bottom:1.5rem; border:1px solid #6EE7B7;">
+        <i class="ph-bold ph-check-circle"></i> Student successfully removed from your advisee list.
+      </div>
+    <?php endif; ?>
+
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; gap: 1rem;">
       <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 700;">
          ADVISER REGISTRY &bull; <?= count($students) ?> STUDENTS
@@ -127,6 +143,9 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                          <?php endif; ?>
                        </div>
                        <div style="font-size: 0.75rem; color: var(--text-muted);"><?= htmlspecialchars($s['email']) ?></div>
+                       <div style="font-size: 0.7rem; color: var(--gold); font-weight: 700; margin-top: 0.25rem;">
+                         <i class="ph-fill ph-calendar-check" style="vertical-align: middle;"></i> Advisee since: <?= $s['advisee_since'] ? date('M j, Y', strtotime($s['advisee_since'])) : 'System Default' ?>
+                       </div>
                     </div>
                   </div>
                 </td>
@@ -143,10 +162,16 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                    <div style="font-weight: 800; font-size: 1rem; color: var(--text-dark);"><?= (int)$s['submission_count'] ?> Total</div>
                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">Last active: <?= $s['last_activity'] ? date('M j, Y', strtotime($s['last_activity'])) : 'N/A' ?></div>
                 </td>
-                 <td style="padding-right: 2rem; text-align: right;">
+                 <td style="padding-right: 2rem; text-align: right; display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; height: 100%;">
                     <a href="<?= BASE_URL ?>faculty/student_record.php?id=<?= (int)$s['id'] ?>" class="btn-action-outline" style="text-decoration: none; padding: 0.5rem 1.25rem; font-weight: 800; font-size: 0.75rem; border-color: var(--crimson); color: var(--crimson);">
-                       <i class="ph ph-list-magnifying-glass"></i> Inspect Records
+                       <i class="ph ph-list-magnifying-glass"></i> Inspect
                     </a>
+                    <form method="POST" style="margin: 0; display: inline-block;">
+                        <input type="hidden" name="remove_student_id" value="<?= (int)$s['id'] ?>">
+                        <button type="submit" class="btn-action-outline" style="background: none; border: 1px solid #DC2626; color: #DC2626; padding: 0.5rem 1rem; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.75rem; font-weight: 800; transition: all 0.2s;" onclick="return confirm('Are you sure you want to remove this student from your advisee list?');">
+                            <i class="ph-bold ph-user-minus"></i> Remove
+                        </button>
+                    </form>
                  </td>
               </tr>
             <?php endforeach; ?>

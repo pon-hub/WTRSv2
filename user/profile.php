@@ -16,11 +16,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($first_name) || empty($last_name)) {
         $flash = ['type' => 'error', 'message' => 'First name and last name are required.'];
     } else {
-        // Update basic info
-        $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ? WHERE id = ?");
-        $stmt->execute([$first_name, $last_name, $college, $user['id']]);
+        $max_advisees = isset($_POST['max_advisees']) ? (int)$_POST['max_advisees'] : null;
+        $proceed_update = true;
 
-        // Update session
+        if ($user['role'] === 'adviser' && $max_advisees !== null) {
+            $advStmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE adviser_id = ?");
+            $advStmt->execute([$user['id']]);
+            $current_advisees = (int)$advStmt->fetchColumn();
+
+            if ($max_advisees < $current_advisees) {
+                $flash = ['type' => 'error', 'message' => "Cannot lower limit to $max_advisees. You currently have $current_advisees advisees. Please remove students first from your Advisee Registry."];
+                $proceed_update = false;
+            }
+        }
+
+        if ($proceed_update) {
+            if ($user['role'] === 'adviser' && $max_advisees !== null) {
+                $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ?, max_advisees = ? WHERE id = ?");
+                $stmt->execute([$first_name, $last_name, $college, $max_advisees, $user['id']]);
+            } else {
+                $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ? WHERE id = ?");
+                $stmt->execute([$first_name, $last_name, $college, $user['id']]);
+            }
+
+            // Update session
         $_SESSION['user']['first_name'] = $first_name;
         $_SESSION['user']['last_name'] = $last_name;
         $user = current_user();
@@ -50,8 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $flash = ['type' => 'success', 'message' => 'Profile updated successfully.'];
             }
         }
-    }
-}
+        } // End if ($proceed_update)
+    } // End else
+} // End if POST
 
 // Fetch fresh user data
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
@@ -177,6 +197,17 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <option value="College of Law" <?= $profile['college'] === 'College of Law' ? 'selected' : '' ?>>College of Law</option>
             </select>
           </div>
+
+          <?php if ($profile['role'] === 'adviser'): ?>
+          <h3 class="profile-section-title" style="margin-top: 2rem;"><i class="ph-fill ph-users-three"></i> Adviser Settings</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem;">Configure how many students you are willing to mentor simultaneously.</p>
+          
+          <div class="form-group">
+            <label class="form-label">Maximum Advisee Capacity</label>
+            <input type="number" name="max_advisees" class="form-control" value="<?= htmlspecialchars($profile['max_advisees'] ?? 10) ?>" min="1" max="100" required>
+            <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 0.5rem;">If you wish to lower this limit below your current number of advisees, you must first remove students from your Advisee Registry.</span>
+          </div>
+          <?php endif; ?>
 
           <h3 class="profile-section-title" style="margin-top: 2rem;"><i class="ph-fill ph-lock-key"></i> Security Settings</h3>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem;">To update your password, please provide your current credentials first.</p>
