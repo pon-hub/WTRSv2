@@ -64,7 +64,7 @@ ob_start();
     font-size: 0.82rem;
     font-weight: 700;
     text-decoration: none;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     box-shadow: 0 4px 12px rgba(139, 0, 0, 0.25);
@@ -89,6 +89,53 @@ ob_start();
     background: #FEF3C7;
     color: #92400E;
     border: 1px solid #FDE68A;
+  }
+
+  .student-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .student-av {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--crimson);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .student-nm { font-weight: 700; color: var(--text-dark); font-size: 0.9rem; }
+  .student-cl { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.1rem; }
+
+  .thesis-code-tag {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: var(--gold);
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+
+  .thesis-title-sm {
+    font-weight: 700;
+    color: var(--text-dark);
+    font-size: 0.88rem;
+  }
+  
+  .version-pill {
+    background: var(--off-white);
+    color: var(--text-muted);
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 800;
   }
 </style>
 <?php
@@ -134,25 +181,25 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
   </div>
 
   <!-- Recent Queue Section -->
-  <div class="section-header">
-    <div>
-      <div class="section-title">Recent Submissions</div>
-      <div class="section-sub">Latest research manuscripts dispatched for your evaluation</div>
+  <div class="table-container">
+    <div class="table-toolbar">
+      <div>
+        <h3>Recent Submissions</h3>
+        <p>Latest research manuscripts dispatched for your evaluation</p>
+      </div>
+      <a href="<?= BASE_URL ?>faculty/review.php" class="btn btn-secondary" style="font-size:0.75rem; padding:0.5rem 1rem; text-decoration:none;">
+        View Entire Queue <i class="ph-bold ph-arrow-right"></i>
+      </a>
     </div>
-    <a href="<?= BASE_URL ?>faculty/review.php" class="btn btn-secondary" style="font-size:0.75rem; padding:0.5rem 1rem; text-decoration:none;">
-      View Entire Queue <i class="ph-bold ph-arrow-right"></i>
-    </a>
-  </div>
 
-  <div class="queue-table-wrap">
     <?php if (empty($recentTheses)): ?>
       <div class="empty-state">
         <i class="ph-fill ph-tray"></i>
-        <h3>No Active Reviews</h3>
         <p>When students submit manuscripts, they will appear here for your formal evaluation.</p>
       </div>
     <?php else: ?>
-      <table class="queue-table">
+      <div class="table-responsive">
+        <table class="queue-table" style="width:100%;">
         <thead>
           <tr>
             <th style="padding-left: 2rem;">Thesis Artifact</th>
@@ -173,7 +220,12 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                 <div class="student-cell">
                   <div class="student-av"><?= htmlspecialchars(strtoupper(substr($t['first_name'], 0, 1) . substr($t['last_name'], 0, 1))) ?></div>
                   <div>
-                    <div class="student-nm"><?= htmlspecialchars($t['first_name'] . ' ' . $t['last_name']) ?></div>
+                    <div class="student-nm">
+                      <?= htmlspecialchars($t['first_name'] . ' ' . $t['last_name']) ?>
+                      <?php if (!empty($t['co_authors'])): ?>
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(with <?= htmlspecialchars($t['co_authors']) ?>)</span>
+                      <?php endif; ?>
+                    </div>
                     <div class="student-cl"><?= htmlspecialchars($t['college']) ?></div>
                   </div>
                 </div>
@@ -204,6 +256,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
           <?php endforeach; ?>
         </tbody>
       </table>
+      </div>
     <?php endif; ?>
   </div>
 

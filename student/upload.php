@@ -6,15 +6,34 @@ $user = current_user();
 $error = null;
 $success = null;
 
-// Fetch advisers for the dropdown
-$advStmt = $pdo->prepare("SELECT id, first_name, last_name FROM users WHERE role = 'adviser' AND status = 'active'");
-$advStmt->execute();
-$advisers = $advStmt->fetchAll();
+// Fetch fresh user data from DB to ensure we have the latest adviser_id (in case it was just approved)
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$user['id']]);
+$dbUser = $stmt->fetch();
+
+// Update session so it's fresh for subsequent requests
+$_SESSION['user'] = $dbUser;
+$user = $dbUser;
+
+if (empty($user['adviser_id'])) {
+    $_SESSION['student_dash_flash'] = [
+        'type' => 'error',
+        'message' => 'You must have an assigned adviser before submitting a thesis. Please wait for your adviser request to be approved or contact your department.'
+    ];
+    header('Location: ' . BASE_URL . 'student/index.php');
+    exit;
+}
+
+// Fetch assigned adviser details for display
+$advStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
+$advStmt->execute([$user['adviser_id']]);
+$assignedAdviser = $advStmt->fetch();
+$adviserName = $assignedAdviser ? 'Dr. ' . $assignedAdviser['first_name'] . ' ' . $assignedAdviser['last_name'] : 'Unknown Adviser';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $title = trim($_POST['title'] ?? '');
   $abstract = trim($_POST['abstract'] ?? '');
-  $adviser_id = $_POST['adviser_id'] ?? null;
+  $adviser_id = $user['adviser_id'];
   $submission_year = (int) ($_POST['submission_year'] ?? date('Y'));
   $author_name = trim($_POST['author_name'] ?? '');
   $thesis_type = $_POST['thesis_type'] ?? 'solo';
@@ -56,43 +75,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       if (move_uploaded_file($fileTmp, $destination)) {
         $pdo->beginTransaction();
         try {
+          $coAuthorsStr = null;
+          if ($thesis_type === 'group' && !empty($co_authors)) {
+              // Filter out empty values and sanitize
+              $filtered = array_filter(array_map('trim', $co_authors));
+              if (!empty($filtered)) {
+                  $coAuthorsStr = implode(', ', $filtered);
+              }
+          }
+
           $thesisCode = 'THS-' . date('Y') . '-' . strtoupper(substr(uniqid(), -4));
-          $insStmt = $pdo->prepare("INSERT INTO theses (thesis_code, title, abstract, author_id, adviser_id, submission_year, thesis_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_review')");
-          $insStmt->execute([$thesisCode, $title, $abstract, $user['id'], $adviser_id, $submission_year, $thesis_type]);
+          $insStmt = $pdo->prepare("INSERT INTO theses (thesis_code, title, abstract, author_id, co_authors, adviser_id, submission_year, thesis_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_review')");
+          $insStmt->execute([$thesisCode, $title, $abstract, $user['id'], $coAuthorsStr, $adviser_id, $submission_year, $thesis_type]);
           $thesisId = $pdo->lastInsertId();
 
           $insVStmt = $pdo->prepare("INSERT INTO thesis_versions (thesis_id, version_number, file_path, file_size, status) VALUES (?, ?, ?, ?, 'pending')");
           $insVStmt->execute([$thesisId, $versionNum, $fileName, $fileSize]);
 
-          // Add co-authors if group thesis
-          if ($thesis_type === 'group' && !empty($co_authors)) {
-            $coAuthorStmt = $pdo->prepare("
-              INSERT INTO thesis_authors (thesis_id, author_id) 
-              SELECT ?, id FROM users 
-              WHERE (email = ? OR CONCAT(first_name, ' ', last_name) = ?) 
-              AND id != ?
-              LIMIT 1
-            ");
-            
-            foreach ($co_authors as $coAuthor) {
-              $coAuthor = trim($coAuthor);
-              if (empty($coAuthor)) continue;
-              
-              // Try to find by email or name
-              try {
-                $coAuthorStmt->execute([$thesisId, $coAuthor, $coAuthor, $user['id']]);
-              } catch (Exception $e) {
-                // Continue if co-author not found
-                continue;
-              }
-            }
-          }
-
           $pdo->commit();
+          
           $_SESSION['student_dash_flash'] = [
             'type' => 'success',
-            'message' => 'Thesis uploaded successfully and is now pending review.' . 
-                         ($thesis_type === 'group' ? ' Co-authors have been notified.' : ''),
+            'message' => 'Thesis uploaded successfully and is now pending review.',
           ];
           header('Location: ' . BASE_URL . 'student/index.php', true, 303);
           exit;
@@ -777,15 +781,12 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
 
           <div class="upload-split">
             <div class="form-group">
-              <label class="form-label" for="upload-adviser">Research adviser</label>
-              <select id="upload-adviser" name="adviser_id" required class="form-control">
-                <option value="">Select faculty member</option>
-                <?php foreach ($advisers as $adv): ?>
-                  <option value="<?= $adv['id'] ?>">
-                    <?= htmlspecialchars(trim(($adv['first_name'] ?? '') . ' ' . ($adv['last_name'] ?? ''))) ?>
-                  </option>
-                <?php endforeach; ?>
-              </select>
+              <label class="form-label">Research adviser</label>
+              <div class="form-control" style="background: #F3F4F6; color: var(--text-muted); cursor: not-allowed; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="ph-fill ph-check-circle" style="color: #059669;"></i>
+                <?= htmlspecialchars($adviserName) ?>
+              </div>
+              <span class="form-hint">Automatically assigned based on your approved request.</span>
             </div>
             <div class="form-group">
               <label class="form-label" for="upload-keywords">Keywords <span
@@ -806,6 +807,12 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <h3>Thesis (PDF)</h3>
               <p>Click or drag your file into the area below. Only one PDF per submission.</p>
             </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.25rem;">
+            <button type="button" id="previewSelectedBtn" class="btn btn-secondary" style="display: none; padding: 0.45rem 0.85rem; font-size: 0.75rem; font-weight: 800; border-color: var(--crimson); color: var(--crimson);">
+              <i class="ph ph-file-search"></i> PREVIEW SELECTED
+            </button>
           </div>
 
           <div class="dropzone-area" id="dropzone" role="button" tabindex="0" aria-label="Upload PDF file">
@@ -861,6 +868,22 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
     </form>
 
   </div>
+  <!-- PDF Preview Modal -->
+  <div id="pdfPreviewModal" style="display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: white; width: 95%; height: 92vh; max-width: 1400px; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface);">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <i class="ph-fill ph-file-pdf" style="color: var(--crimson); font-size: 1.5rem;"></i>
+          <h3 id="modalTitle" style="margin: 0; font-family: var(--font-serif); font-size: 1.1rem;">Selected Manuscript Preview</h3>
+        </div>
+        <button id="closePreview" style="background: var(--off-white); border: 0; width: 2.5rem; height: 2.5rem; border-radius: 50%; font-size: 1.5rem; cursor: pointer;">&times;</button>
+      </div>
+      <div style="flex: 1; background: #525659;">
+        <iframe id="pdfFrame" src="" style="width: 100%; height: 100%; border: 0;"></iframe>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <?php
@@ -874,6 +897,13 @@ ob_start();
     const fileNameDisp = document.getElementById('fileName');
     const fileSizeDisp = document.getElementById('fileSize');
     const removeBtn = document.getElementById('removeFile');
+    const previewBtn = document.getElementById('previewSelectedBtn');
+    
+    const pdfModal = document.getElementById('pdfPreviewModal');
+    const pdfFrame = document.getElementById('pdfFrame');
+    const closePreview = document.getElementById('closePreview');
+
+    let selectedFileUrl = null;
     const MAX_BYTES = 20 * 1024 * 1024;
 
     function formatSize(bytes) {
@@ -897,6 +927,10 @@ ob_start();
       fileSizeDisp.textContent = formatSize(file.size);
       dropzone.style.display = 'none';
       selectedFile.classList.add('active');
+      previewBtn.style.display = 'flex';
+      
+      if (selectedFileUrl) URL.revokeObjectURL(selectedFileUrl);
+      selectedFileUrl = URL.createObjectURL(file);
       return true;
     }
 
@@ -916,7 +950,27 @@ ob_start();
       fileInput.value = '';
       selectedFile.classList.remove('active');
       dropzone.style.display = 'block';
+      previewBtn.style.display = 'none';
+      if (selectedFileUrl) URL.revokeObjectURL(selectedFileUrl);
+      selectedFileUrl = null;
     });
+
+    // Preview Logic
+    previewBtn.addEventListener('click', function() {
+      if (selectedFileUrl) {
+        pdfFrame.src = selectedFileUrl;
+        pdfModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      }
+    });
+
+    closePreview.addEventListener('click', function() {
+      pdfModal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      pdfFrame.src = "";
+    });
+
+    window.onclick = (e) => { if (e.target == pdfModal) closePreview.click(); };
 
     dropzone.addEventListener('dragover', function (e) {
       e.preventDefault();

@@ -1,6 +1,7 @@
 <?php
 // Central session and auth helper
 require_once __DIR__ . '/config.php';
+date_default_timezone_set('Asia/Manila');
 
 if (session_status() === PHP_SESSION_NONE) {
     // Session Security Hardening
@@ -51,6 +52,36 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS activity_logs (
     CONSTRAINT fk_activity_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 )");
 
+$pdo->exec("CREATE TABLE IF NOT EXISTS adviser_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    adviser_id INT NOT NULL,
+    status ENUM('pending', 'accepted', 'rejected', 'cancelled') DEFAULT 'pending',
+    message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_adv_req_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_adv_req_adviser FOREIGN KEY (adviser_id) REFERENCES users(id) ON DELETE CASCADE
+)");
+
+// Safety migration for missing message column
+try {
+    $pdo->exec("ALTER TABLE adviser_requests ADD COLUMN message TEXT AFTER status");
+} catch (PDOException $e) {}
+
+// Safety migration for profile fields in users table
+try {
+    $pdo->exec("ALTER TABLE users ADD COLUMN bio TEXT AFTER email");
+    $pdo->exec("ALTER TABLE users ADD COLUMN research_interests TEXT AFTER bio");
+    $pdo->exec("ALTER TABLE users ADD COLUMN experience TEXT AFTER research_interests");
+    $pdo->exec("ALTER TABLE users ADD COLUMN profile_pic VARCHAR(255) AFTER experience");
+} catch (PDOException $e) {}
+
+// Safety migration for theses table
+try {
+    $pdo->exec("ALTER TABLE theses ADD COLUMN submission_year INT NOT NULL DEFAULT YEAR(CURDATE()) AFTER adviser_id");
+} catch (PDOException $e) {}
+
 function is_logged_in() {
     return !empty($_SESSION['user_id']);
 }
@@ -71,4 +102,36 @@ function require_login($allowedRoles = []) {
         echo '<h1>403 Forbidden</h1><p>You do not have access to this page.</p>';
         exit;
     }
+}
+
+function time_ago($timestamp) {
+    if (!$timestamp) return 'n/a';
+    $time = is_numeric($timestamp) ? $timestamp : strtotime($timestamp);
+    $diff = time() - $time;
+    
+    if ($diff < 60) return 'Just now';
+    $intervals = [
+        31536000 => 'year',
+        2592000  => 'month',
+        604800   => 'week',
+        86400    => 'day',
+        3600     => 'hour',
+        60       => 'minute'
+    ];
+    
+    foreach ($intervals as $secs => $label) {
+        $div = $diff / $secs;
+        if ($div >= 1) {
+            $n = round($div);
+            return $n . ' ' . $label . ($n > 1 ? 's' : '') . ' ago';
+        }
+    }
+    return 'Just now';
+}
+
+function format_size($bytes) {
+    if ($bytes <= 0) return '0 B';
+    $base = log($bytes, 1024);
+    $suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    return round(pow(1024, $base - floor($base)), 2) . ' ' . $suffixes[floor($base)];
 }

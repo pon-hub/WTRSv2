@@ -4,6 +4,13 @@ require_login(['student']);
 
 $user = current_user();
 
+// Fetch fresh user data from DB to ensure session is up to date (e.g., if an adviser just approved a request)
+$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$user['id']]);
+$dbUser = $stmt->fetch();
+$_SESSION['user'] = $dbUser;
+$user = $dbUser;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_thesis_id'])) {
   $tid = (int) $_POST['delete_thesis_id'];
   if ($tid <= 0) {
@@ -72,22 +79,22 @@ $latestRequest = $reqStmt->fetch(PDO::FETCH_ASSOC);
 // Fetch current adviser details if assigned
 $currentAdviser = null;
 if (!empty($user['adviser_id'])) {
-    $advStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
-    $advStmt->execute([$user['adviser_id']]);
-    $currentAdviser = $advStmt->fetch(PDO::FETCH_ASSOC);
+  $advStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
+  $advStmt->execute([$user['adviser_id']]);
+  $currentAdviser = $advStmt->fetch(PDO::FETCH_ASSOC);
 }
 
-// Fetch ALL theses by the student (both as primary author and co-author)
+// Fetch ALL theses by the student
 $stmtAll = $pdo->prepare("
   SELECT t.*, u.first_name as adviser_first, u.last_name as adviser_last,
-         CASE WHEN t.author_id = ? THEN 'primary' ELSE 'coauthor' END as role
+         'primary' as role,
+         (SELECT CONCAT(pu.first_name, ' ', pu.last_name) FROM users pu WHERE pu.id = t.author_id) as primary_author
   FROM theses t
   LEFT JOIN users u ON t.adviser_id = u.id
   WHERE t.author_id = ? 
-     OR t.id IN (SELECT thesis_id FROM thesis_authors WHERE author_id = ?)
   ORDER BY t.created_at DESC
 ");
-$stmtAll->execute([$user['id'], $user['id'], $user['id']]);
+$stmtAll->execute([$user['id']]);
 $allTheses = $stmtAll->fetchAll();
 
 // Active thesis is either the requested ID or the latest one
@@ -428,7 +435,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
         </a>
       <?php endif; ?>
       <a href="upload.php" class="btn btn-primary" style="text-decoration:none;">
-        <i class="ph-bold ph-upload-simple"></i> Submit New Thesis
+        <i class="ph-bold ph-upload-simple"></i> Submit Thesis
       </a>
     </div>
   </div>
@@ -443,23 +450,28 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
   <?php endif; ?>
 
   <?php if ($latestRequest && $latestRequest['status'] === 'pending'): ?>
-    <div class="alert alert-warning" style="background:#FFFBEB; color:#92400E; padding:1rem; border-radius:var(--radius-sm); margin-bottom:1.5rem; border:1px solid #FEF3C7; display: flex; align-items: center; gap: 1rem; box-shadow: var(--shadow-sm);">
+    <div class="alert alert-warning"
+      style="background:#FFFBEB; color:#92400E; padding:1rem; border-radius:var(--radius-sm); margin-bottom:1.5rem; border:1px solid #FEF3C7; display: flex; align-items: center; gap: 1rem; box-shadow: var(--shadow-sm);">
       <i class="ph-bold ph-hourglass-high" style="font-size: 1.5rem;"></i>
       <div>
         <strong style="display:block; margin-bottom:0.1rem;">Waiting for Adviser Approval</strong>
-        <span style="font-size:0.85rem;">Your request to select Dr. <?= htmlspecialchars($latestRequest['last_name']) ?> as your adviser is pending review.</span>
+        <span style="font-size:0.85rem;">Your request to select Dr. <?= htmlspecialchars($latestRequest['last_name']) ?>
+          as your adviser is pending review.</span>
       </div>
     </div>
   <?php elseif ($latestRequest && $latestRequest['status'] === 'rejected' && empty($user['adviser_id'])): ?>
-    <div class="alert alert-error" style="background:#FEE2E2; color:#991B1B; padding:1rem; border-radius:var(--radius-sm); margin-bottom:1.5rem; border:1px solid #FECACA; display: flex; align-items: center; justify-content: space-between; gap: 1rem; box-shadow: var(--shadow-sm);">
+    <div class="alert alert-error"
+      style="background:#FEE2E2; color:#991B1B; padding:1rem; border-radius:var(--radius-sm); margin-bottom:1.5rem; border:1px solid #FECACA; display: flex; align-items: center; justify-content: space-between; gap: 1rem; box-shadow: var(--shadow-sm);">
       <div style="display: flex; align-items: center; gap: 1rem;">
         <i class="ph-bold ph-warning-circle" style="font-size: 1.5rem;"></i>
         <div>
           <strong style="display:block; margin-bottom:0.1rem;">Adviser Request Rejected</strong>
-          <span style="font-size:0.85rem;">Dr. <?= htmlspecialchars($latestRequest['last_name']) ?> could not accept your request. Please select a new adviser.</span>
+          <span style="font-size:0.85rem;">Dr. <?= htmlspecialchars($latestRequest['last_name']) ?> could not accept your
+            request. Please select a new adviser.</span>
         </div>
       </div>
-      <a href="request_adviser.php" class="btn btn-primary" style="white-space: nowrap; font-size: 0.8rem; padding: 0.5rem 1rem;">Select New Adviser</a>
+      <a href="request_adviser.php" class="btn btn-primary"
+        style="white-space: nowrap; font-size: 0.8rem; padding: 0.5rem 1rem;">Select New Adviser</a>
     </div>
   <?php endif; ?>
 
@@ -497,7 +509,6 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
         <div class="empty-state">
           <i class="ph-fill ph-files"></i>
           <p>No submissions found.</p>
-          <a href="upload.php" class="btn btn-primary">Start Your First Submission</a>
         </div>
       <?php else: ?>
         <div class="table-responsive">
@@ -522,8 +533,16 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                         <div style="font-weight: 700; color: var(--text-dark); font-size: 0.88rem; margin-top: 0.2rem;">
                           <?= htmlspecialchars($t['title']) ?>
                         </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
+                          <i class="ph-fill ph-users" style="margin-right: 0.2rem;"></i>
+                          <strong><?= htmlspecialchars($t['primary_author']) ?></strong>
+                          <?php if (!empty($t['co_authors'])): ?>
+                            , <?= htmlspecialchars($t['co_authors']) ?>
+                          <?php endif; ?>
+                        </div>
                         <?php if ($t['role'] === 'coauthor'): ?>
-                          <span style="display: inline-block; font-size: 0.65rem; font-weight: 800; color: #6366F1; background: #E0E7FF; padding: 0.2rem 0.6rem; border-radius: 4px; margin-top: 0.4rem; text-transform: uppercase;">Co-author</span>
+                          <span
+                            style="display: inline-block; font-size: 0.65rem; font-weight: 800; color: #6366F1; background: #E0E7FF; padding: 0.2rem 0.6rem; border-radius: 4px; margin-top: 0.4rem; text-transform: uppercase;">Co-author</span>
                         <?php endif; ?>
                       </div>
                     </div>
@@ -564,7 +583,8 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                           </button>
                         </form>
                       <?php else: ?>
-                        <span class="submission-delete-na" title="<?= $t['role'] === 'coauthor' ? 'Only primary authors can delete' : 'Approved or archived records cannot be deleted' ?>">
+                        <span class="submission-delete-na"
+                          title="<?= $t['role'] === 'coauthor' ? 'Only primary authors can delete' : 'Approved or archived records cannot be deleted' ?>">
                           <i class="ph-bold ph-lock-key"></i>
                         </span>
                       <?php endif; ?>
@@ -615,7 +635,8 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div class="stat-title">Adviser</div>
           <?php if ($currentAdviser): ?>
-            <a href="request_adviser.php" style="font-size:0.65rem; font-weight:800; color:var(--crimson); text-decoration:none; background:var(--crimson-faint); padding:0.2rem 0.5rem; border-radius:4px; transition:background 0.2s;">CHANGE</a>
+            <a href="request_adviser.php"
+              style="font-size:0.65rem; font-weight:800; color:var(--crimson); text-decoration:none; background:var(--crimson-faint); padding:0.2rem 0.5rem; border-radius:4px; transition:background 0.2s;">CHANGE</a>
           <?php endif; ?>
         </div>
         <div class="stat-value" style="font-size:1.15rem; line-height:1.2;">
@@ -760,7 +781,6 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
             <i class="ph-fill ph-files" style="color: var(--gold); font-size: 4rem; opacity: 0.3;"></i>
             <h3 style="font-family: var(--font-serif); margin: 1.5rem 0 0.5rem;">No Entries</h3>
             <p>You have not registered any research artifacts yet. Begin your archival journey today.</p>
-            <a href="upload.php" class="btn btn-primary" style="margin-top: 2rem;">Submit Thesis</a>
           </div>
         <?php endif; ?>
       </div>

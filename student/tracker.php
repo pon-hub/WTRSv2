@@ -592,61 +592,89 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
   </div>
 
   <!-- PDF Preview Modal -->
-  <div id="pdfPreviewModal" class="pdf-preview-modal">
-    <div class="pdf-preview-content">
-      <div class="pdf-preview-header">
-        <h3>Thesis Preview</h3>
-        <button class="pdf-preview-close" id="closePreview">&times;</button>
+  <div id="pdfPreviewModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: var(--radius-lg); width: 90%; height: 90vh; max-width: 1200px; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); overflow: hidden;">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface);">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <i class="ph-fill ph-file-pdf" style="color: var(--crimson); font-size: 1.5rem;"></i>
+          <h3 id="modalTitle" style="margin: 0; font-size: 1.1rem; color: var(--text-dark); font-family: var(--font-serif);">Manuscript Preview</h3>
+        </div>
+        <button onclick="closeModal()" style="background: var(--off-white); border: none; width: 2.5rem; height: 2.5rem; border-radius: 50%; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center;">&times;</button>
       </div>
-      <div class="pdf-preview-viewer">
-        <iframe id="pdfFrame" src="" type="application/pdf"></iframe>
+      <div style="flex: 1; display: grid; grid-template-columns: 1fr 320px; overflow: hidden;">
+        <div style="background: #525659; overflow: hidden;">
+          <iframe id="pdfFrame" src="" type="application/pdf" style="width: 100%; height: 100%; border: none;"></iframe>
+        </div>
+        <div style="background: var(--surface); border-left: 1px solid var(--border); padding: 2rem; overflow-y: auto;">
+          <h4 style="font-size: 0.7rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Project Details</h4>
+          
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--crimson); text-transform: uppercase; margin-bottom: 0.35rem;">Title</label>
+            <div style="font-weight: 700; font-size: 0.95rem; line-height: 1.4;"><?= htmlspecialchars($thesis['title']) ?></div>
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--crimson); text-transform: uppercase; margin-bottom: 0.35rem;">Authors</label>
+            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-dark);"><?= htmlspecialchars($user['first_name'].' '.$user['last_name']) ?></div>
+            <?php if (!empty($thesis['co_authors'])): ?>
+              <div style="font-weight: 600; font-size: 0.8rem; color: var(--text-mid); margin-top: 0.25rem;"><?= htmlspecialchars($thesis['co_authors']) ?></div>
+            <?php endif; ?>
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; font-size: 0.65rem; font-weight: 800; color: var(--crimson); text-transform: uppercase; margin-bottom: 0.35rem;">Academic Info</label>
+            <div style="font-size: 0.8rem; margin-bottom: 0.2rem;">Adviser: <strong>Dr. <?= htmlspecialchars($thesis['adviser_last'] ?? 'Unassigned') ?></strong></div>
+            <div style="font-size: 0.8rem; margin-top: 0.2rem;">Registry Code: <br><strong style="color: var(--crimson);"><?= htmlspecialchars($thesis['thesis_code']) ?></strong></div>
+          </div>
+
+          <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px dotted var(--border);">
+            <p style="font-size: 0.7rem; color: var(--text-muted); line-height: 1.5;">
+              This manuscript is currently in the institutional review process. Ensure all metadata is accurate for final archival.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    // Toggle Thesis History
     function toggleHistory() {
       const toggle = document.getElementById('historyToggle');
       const container = document.getElementById('historyContainer');
-      
       toggle.classList.toggle('expanded');
       container.classList.toggle('expanded');
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
-      const previewBtn = document.getElementById('previewBtn');
-      const pdfModal = document.getElementById('pdfPreviewModal');
-      const closeBtn = document.getElementById('closePreview');
-      const pdfFrame = document.getElementById('pdfFrame');
-      const latestPath = '<?= htmlspecialchars($latestVersion['file_path'] ?? '') ?>';
+    function previewPdf(path, ver) {
+      const modal = document.getElementById('pdfPreviewModal');
+      const frame = document.getElementById('pdfFrame');
+      const title = document.getElementById('modalTitle');
+      
+      title.innerText = "Manuscript Preview (" + ver + ")";
+      frame.src = "<?= BASE_URL ?>public/uploads/" + path;
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
 
-      if (previewBtn && latestPath) {
-        previewBtn.addEventListener('click', function() {
-          pdfFrame.src = '../public/uploads/' + latestPath;
-          pdfModal.classList.add('show');
-          document.body.style.overflow = 'hidden';
-        });
+    function closeModal() {
+      const modal = document.getElementById('pdfPreviewModal');
+      const frame = document.getElementById('pdfFrame');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      frame.src = "";
+    }
 
-        closeBtn.addEventListener('click', function() {
-          pdfModal.classList.remove('show');
-          document.body.style.overflow = 'auto';
-        });
+    document.getElementById('previewBtn')?.addEventListener('click', () => {
+        previewPdf('<?= htmlspecialchars($latestVersion['file_path'] ?? '') ?>', 'v<?= htmlspecialchars($latestVersion['version_number'] ?? '1.0') ?>');
+    });
 
-        pdfModal.addEventListener('click', function(e) {
-          if (e.target === pdfModal) {
-            pdfModal.classList.remove('show');
-            document.body.style.overflow = 'auto';
-          }
-        });
+    window.onclick = (e) => { 
+        const modal = document.getElementById('pdfPreviewModal');
+        if (e.target == modal) closeModal(); 
+    };
 
-        document.addEventListener('keydown', function(e) {
-          if (e.key === 'Escape' && pdfModal.classList.contains('show')) {
-            pdfModal.classList.remove('show');
-            document.body.style.overflow = 'auto';
-          }
-        });
-      }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
     });
   </script>
 

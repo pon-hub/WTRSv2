@@ -118,8 +118,8 @@ $extraCss = ob_get_clean();
          
          <div class="institutional-banner">
             <div class="banner-item">
-              <span class="banner-label">CONTRIBUTOR / AUTHOR</span>
-              <span class="banner-value"><?= htmlspecialchars($thesis['first_name'] . ' ' . $thesis['last_name']) ?></span>
+              <span class="banner-label">CONTRIBUTORS / AUTHORS</span>
+              <span class="banner-value"><?= htmlspecialchars($thesis['first_name'] . ' ' . $thesis['last_name']) ?><?php if(!empty($thesis['co_authors'])): ?>, <?= htmlspecialchars($thesis['co_authors']) ?><?php endif; ?></span>
             </div>
             <div class="banner-item">
               <span class="banner-label">COLLEGE / FACULTY</span>

@@ -27,6 +27,9 @@ if (!isset($sortOptions[$sort])) {
   $sort = 'latest';
 }
 
+$yearFilter = $_GET['year'] ?? '';
+$monthFilter = $_GET['month'] ?? '';
+
 // Build query - only show published theses publicly
 $sql = "SELECT t.*, u.first_name, u.last_name, u.college 
         FROM theses t
@@ -41,6 +44,16 @@ if (!empty($search)) {
   $params['search3'] = "%$search%";
 }
 
+if (!empty($yearFilter)) {
+  $sql .= " AND YEAR(COALESCE(t.hardbound_received_at, t.created_at)) = :year";
+  $params['year'] = $yearFilter;
+}
+
+if (!empty($monthFilter)) {
+  $sql .= " AND MONTH(COALESCE(t.hardbound_received_at, t.created_at)) = :month";
+  $params['month'] = $monthFilter;
+}
+
 $sql .= " ORDER BY " . $sortOptions[$sort]['order_sql'];
 
 $stmt = $pdo->prepare($sql);
@@ -50,6 +63,15 @@ $theses = $stmt->fetchAll();
 // Total published count
 $countStmt = $pdo->query("SELECT COUNT(*) FROM theses WHERE status = 'archived'");
 $totalApproved = $countStmt->fetchColumn();
+
+// Fetch available years for filtering
+$yearsStmt = $pdo->query("SELECT DISTINCT YEAR(COALESCE(hardbound_received_at, created_at)) as y FROM theses WHERE status = 'archived' ORDER BY y DESC");
+$availableYears = $yearsStmt->fetchAll(PDO::FETCH_COLUMN);
+
+$months = [
+  1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April', 5 => 'May', 6 => 'June',
+  7 => 'July', 8 => 'August', 9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -84,7 +106,7 @@ $totalApproved = $countStmt->fetchColumn();
         <form action="archive.php" method="GET" class="search-container">
           <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
           <div class="search-bar-giant">
-            <input type="text" name="q" placeholder="Search research title, keywords, or author..." value="<?= htmlspecialchars($search) ?>" autocomplete="off">
+            <input type="text" name="q" placeholder="Search research title, keywords, or author..." value="<?= htmlspecialchars($search) ?>" autocomplete="off" autofocus>
             <button type="submit" class="btn btn-primary"><i class="ph ph-magnifying-glass"></i> Explore Archives</button>
           </div>
         </form>
@@ -98,17 +120,40 @@ $totalApproved = $countStmt->fetchColumn();
         <h2 class="results-title">
           Found <span><?= count($theses) ?></span> scholarly artifact<?= count($theses) !== 1 ? 's' : '' ?>
         </h2>
-        <div class="pub-results-sort">
-          <form method="GET" action="archive.php" class="pub-results-sort-form">
+        <div class="pub-results-filters">
+          <form method="GET" action="archive.php" class="pub-filter-form">
             <?php if ($search !== ''): ?>
               <input type="hidden" name="q" value="<?= htmlspecialchars($search) ?>">
             <?php endif; ?>
-            <span>Sort by:</span>
-            <select name="sort" onchange="this.form.submit()" class="pub-sort-select">
-              <?php foreach ($sortOptions as $key => $opt): ?>
-                <option value="<?= htmlspecialchars($key) ?>" <?= $sort === $key ? 'selected' : '' ?>><?= htmlspecialchars($opt['label']) ?></option>
-              <?php endforeach; ?>
-            </select>
+            
+            <div class="filter-group">
+              <span>Year:</span>
+              <select name="year" onchange="this.form.submit()" class="pub-sort-select">
+                <option value="">All Years</option>
+                <?php foreach ($availableYears as $y): ?>
+                  <option value="<?= $y ?>" <?= $yearFilter == $y ? 'selected' : '' ?>><?= $y ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <span>Month:</span>
+              <select name="month" onchange="this.form.submit()" class="pub-sort-select">
+                <option value="">All Months</option>
+                <?php foreach ($months as $num => $name): ?>
+                  <option value="<?= $num ?>" <?= $monthFilter == $num ? 'selected' : '' ?>><?= $name ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <span>Sort:</span>
+              <select name="sort" onchange="this.form.submit()" class="pub-sort-select">
+                <?php foreach ($sortOptions as $key => $opt): ?>
+                  <option value="<?= htmlspecialchars($key) ?>" <?= $sort === $key ? 'selected' : '' ?>><?= htmlspecialchars($opt['label']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
           </form>
         </div>
       </div>
@@ -129,7 +174,7 @@ $totalApproved = $countStmt->fetchColumn();
                   </div>
                   <h3><?= htmlspecialchars($thesis['title']) ?></h3>
                   <div class="thesis-authors">
-                    <span><i class="ph-bold ph-user"></i> <?= htmlspecialchars($thesis['first_name'] . ' ' . $thesis['last_name']) ?></span>
+                    <span><i class="ph-bold ph-user"></i> <?= htmlspecialchars($thesis['first_name'] . ' ' . $thesis['last_name']) ?><?php if(!empty($thesis['co_authors'])): ?>, <?= htmlspecialchars($thesis['co_authors']) ?><?php endif; ?></span>
                   </div>
                   <?php $abs = (string)($thesis['abstract'] ?? ''); ?>
                   <p class="thesis-abstract"><?= htmlspecialchars(mb_substr($abs, 0, 250)) ?><?= mb_strlen($abs) > 250 ? '...' : '' ?></p>

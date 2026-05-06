@@ -11,7 +11,7 @@ define('ENVIRONMENT', 'development');
 // Base URL configuration
 // If deploying to a subdirectory: '/wtrs/'
 // If deploying to a root domain: '/'
-define('BASE_URL', '/wtrs/');
+define('BASE_URL', '/wtrsv2_Razdy/');
 
 // Application Constants
 define('APP_NAME', 'WMSU Thesis Repository');

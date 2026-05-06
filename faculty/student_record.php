@@ -115,11 +115,14 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
         <div class="av-dossier"><?= htmlspecialchars(strtoupper(substr($student['first_name'], 0, 1) . substr($student['last_name'], 0, 1))) ?></div>
         <div>
            <h1 class="student-name"><?= htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) ?></h1>
-           <div class="student-meta">
-              <span style="color: var(--crimson);"><?= htmlspecialchars($student['college']) ?></span> &bull; 
-              <?= htmlspecialchars($student['email']) ?> &bull; 
-              ID# <?= str_pad($student['id'], 6, '0', STR_PAD_LEFT) ?>
-           </div>
+            <div class="student-meta">
+               <span style="color: var(--crimson);"><?= htmlspecialchars($student['college']) ?></span> &bull; 
+               <?php if (!empty($student['course'])): ?>
+                 <span><?= htmlspecialchars($student['course']) ?> (<?= htmlspecialchars($student['year_level'] ?? 'N/A') ?>)</span> &bull;
+               <?php endif; ?>
+               <?= htmlspecialchars($student['email']) ?> &bull; 
+               ID# <?= htmlspecialchars($student['student_id'] ?? str_pad($student['id'], 6, '0', STR_PAD_LEFT)) ?>
+            </div>
         </div>
      </div>
 
@@ -162,6 +165,11 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <div class="artifact-main">
                  <span class="artifact-code"><?= htmlspecialchars($th['thesis_code']) ?></span>
                  <h3 class="artifact-title"><?= htmlspecialchars($th['title']) ?></h3>
+                  <?php if (!empty($th['co_authors'])): ?>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.8rem; font-weight: 600;">
+                      <i class="ph-bold ph-users" style="margin-right: 0.2rem;"></i> with <?= htmlspecialchars($th['co_authors']) ?>
+                    </div>
+                  <?php endif; ?>
                  <div class="artifact-meta">
                     <span style="display:flex; align-items:center; gap:0.4rem;"><i class="ph-bold ph-calendar"></i> Init: <?= date('M j, Y', strtotime($th['created_at'])) ?></span>
                     <span style="display:flex; align-items:center; gap:0.4rem;"><i class="ph-bold ph-clock"></i> Last Activity: <?= $th['latest_activity'] ? date('M j, Y', strtotime($th['latest_activity'])) : 'N/A' ?></span>

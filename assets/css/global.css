@@ -135,3 +135,13 @@ a {
 
 .text-muted { color: var(--text-muted); font-size: 0.88rem; }
 .gold-text  { color: var(--gold); }
+
+/* Animations */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}

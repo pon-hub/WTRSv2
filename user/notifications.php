@@ -182,18 +182,19 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
           <i class="ph-fill ph-bell-ringing"></i> Thesis Request Notifications
         </div>
         <?php foreach ($requestNotifs as $rn): ?>
-        <div class="notif-item" data-notification-id="<?= (int)$rn['id'] ?>">
+        <div class="notif-item">
           <div class="notif-row">
-            <span class="notif-code"><?= htmlspecialchars($rn['thesis_code'] ?? 'THESIS REQUEST') ?></span>
-            <span class="notif-date"><?= date('M j, Y', strtotime($rn['created_at'])) ?></span>
+            <span class="notif-code"><?= htmlspecialchars($rn['thesis_code'] ?? 'GENERAL') ?></span>
+            <span class="notif-date" title="<?= date('F j, Y, g:i A', strtotime($rn['created_at'])) ?>"><?= time_ago($rn['created_at']) ?></span>
           </div>
+          <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-dark);"><?= htmlspecialchars($rn['title'] ?? 'New Request') ?></div>
           <p class="notif-text"><?= htmlspecialchars($rn['message']) ?></p>
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem;">
             <span class="notif-author">From: <?= htmlspecialchars(trim(($rn['first_name'] ?? '') . ' ' . ($rn['last_name'] ?? ''))) ?></span>
             <?php if (($rn['type'] ?? '') === 'thesis_request' && !empty($rn['thesis_id'])): ?>
-              <a href="<?= BASE_URL ?>faculty/review.php?id=<?= (int)$rn['thesis_id'] ?>" class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.72rem; text-decoration:none;">View</a>
+              <a href="<?= BASE_URL ?>faculty/review.php?id=<?= (int)$rn['thesis_id'] ?>" class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.72rem; text-decoration:none;">Process Request</a>
             <?php else: ?>
-              <span class="notif-status status-approved"><?= ($rn['type'] ?? '') === 'thesis_request_cancelled' ? 'Canceled by Student' : 'Processed' ?></span>
+              <span class="notif-status status-approved"><?= ($rn['type'] ?? '') === 'thesis_request_cancelled' ? 'Canceled' : 'Processed' ?></span>
             <?php endif; ?>
           </div>
         </div>
@@ -207,11 +208,12 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
           <i class="ph-fill ph-student"></i> Adviser Assignment Decisions
         </div>
         <?php foreach ($requestDecisionNotifs as $dn): ?>
-        <div class="notif-item" data-notification-id="<?= (int)$dn['id'] ?>">
+        <div class="notif-item">
           <div class="notif-row">
             <span class="notif-code"><?= htmlspecialchars($dn['thesis_code'] ?? 'THESIS') ?></span>
-            <span class="notif-date"><?= date('M j, Y', strtotime($dn['created_at'])) ?></span>
+            <span class="notif-date" title="<?= date('F j, Y, g:i A', strtotime($dn['created_at'])) ?>"><?= time_ago($dn['created_at']) ?></span>
           </div>
+          <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-dark);"><?= htmlspecialchars($dn['title'] ?? 'Submission Status') ?></div>
           <p class="notif-text"><?= htmlspecialchars($dn['message']) ?></p>
           <div class="notif-author">Adviser: <?= htmlspecialchars(trim(($dn['adviser_first'] ?? '') . ' ' . ($dn['adviser_last'] ?? ''))) ?></div>
         </div>
@@ -242,11 +244,12 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
           <i class="ph-fill ph-chat-centered-text"></i> Adviser Feedback
         </div>
         <?php foreach ($notifications as $n): ?>
-        <div class="notif-item" data-notification-id="<?= (int)$n['id'] ?>">
+        <div class="notif-item">
           <div class="notif-row">
             <span class="notif-code"><?= htmlspecialchars($n['thesis_code']) ?></span>
-            <span class="notif-date"><?= date('M j, Y', strtotime($n['created_at'])) ?></span>
+            <span class="notif-date" title="<?= date('F j, Y, g:i A', strtotime($n['created_at'])) ?>"><?= time_ago($n['created_at']) ?></span>
           </div>
+          <div style="font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-dark);"><?= htmlspecialchars($n['title']) ?></div>
           <p class="notif-text">"<?= htmlspecialchars($n['message']) ?>"</p>
           <div class="notif-author">— <?= htmlspecialchars($n['adviser_first'] . ' ' . $n['adviser_last']) ?></div>
         </div>
@@ -266,7 +269,7 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <span class="activity-tag"><?= htmlspecialchars($log['action_type']) ?></span>
               <span style="color: var(--text-dark); font-weight: 500;"><?= htmlspecialchars($log['description']) ?></span>
             </div>
-            <span class="notif-date"><?= date('M j, h:i A', strtotime($log['created_at'])) ?></span>
+            <span class="notif-date"><?= time_ago($log['created_at']) ?></span>
           </div>
           <?php endforeach; ?>
         <?php else: ?>

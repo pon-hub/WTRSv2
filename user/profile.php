@@ -10,8 +10,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $first_name = trim($_POST['first_name'] ?? '');
     $last_name = trim($_POST['last_name'] ?? '');
     $college = trim($_POST['college'] ?? '');
+    $student_id = trim($_POST['student_id'] ?? '');
+    $course = trim($_POST['course'] ?? '');
+    $year_level = trim($_POST['year_level'] ?? '');
+    $bio = trim($_POST['bio'] ?? '');
+    $research_interests = trim($_POST['research_interests'] ?? '');
+    $experience = trim($_POST['experience'] ?? '');
     $current_password = $_POST['current_password'] ?? '';
     $new_password = $_POST['new_password'] ?? '';
+
+    // Handle Profile Picture
+    $profile_pic = $user['profile_pic'] ?? null;
+    if (isset($_FILES['profile_pic']) && $_FILES['profile_pic']['error'] === UPLOAD_ERR_OK) {
+        $file = $_FILES['profile_pic'];
+        $allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        if (in_array($file['type'], $allowed) && $file['size'] <= 2 * 1024 * 1024) {
+            $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $new_name = 'avatar_' . $user['id'] . '_' . time() . '.' . $ext;
+            $dest = __DIR__ . '/../public/uploads/avatars/' . $new_name;
+            if (!is_dir(__DIR__ . '/../public/uploads/avatars/')) {
+                mkdir(__DIR__ . '/../public/uploads/avatars/', 0755, true);
+            }
+            if (move_uploaded_file($file['tmp_name'], $dest)) {
+                $profile_pic = $new_name;
+            }
+        }
+    }
 
     if (empty($first_name) || empty($last_name)) {
         $flash = ['type' => 'error', 'message' => 'First name and last name are required.'];
@@ -32,17 +56,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($proceed_update) {
             if ($user['role'] === 'adviser' && $max_advisees !== null) {
-                $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ?, max_advisees = ? WHERE id = ?");
-                $stmt->execute([$first_name, $last_name, $college, $max_advisees, $user['id']]);
+                $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ?, max_advisees = ?, bio = ?, research_interests = ?, experience = ?, profile_pic = ? WHERE id = ?");
+                $stmt->execute([$first_name, $last_name, $college, $max_advisees, $bio, $research_interests, $experience, $profile_pic, $user['id']]);
+            } elseif ($user['role'] === 'student') {
+                $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ?, student_id = ?, course = ?, year_level = ?, bio = ?, research_interests = ?, experience = ?, profile_pic = ? WHERE id = ?");
+                $stmt->execute([$first_name, $last_name, $college, $student_id, $course, $year_level, $bio, $research_interests, $experience, $profile_pic, $user['id']]);
+
+                // Handle adviser change request
+                $new_adviser = $_POST['new_adviser'] ?? '';
+                if (!empty($new_adviser) && $new_adviser != $user['adviser_id']) {
+                    // Cancel existing pending requests
+                    $pdo->prepare("UPDATE adviser_requests SET status = 'rejected' WHERE student_id = ? AND status = 'pending'")->execute([$user['id']]);
+                    
+                    // Create new request
+                    $pdo->prepare("INSERT INTO adviser_requests (student_id, adviser_id, status) VALUES (?, ?, 'pending')")->execute([$user['id'], $new_adviser]);
+                    
+                    // Notify new adviser
+                    $notifyMsg = htmlspecialchars($first_name . ' ' . $last_name) . " has requested you as their new adviser.";
+                    $pdo->prepare("INSERT INTO notifications (recipient_user_id, sender_user_id, type, message) VALUES (?, ?, 'adviser_request', ?)")
+                        ->execute([$new_adviser, $user['id'], $notifyMsg]);
+                    
+                    $flash = ['type' => 'success', 'message' => 'Profile updated and adviser change request submitted successfully.'];
+                }
             } else {
-                $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ? WHERE id = ?");
-                $stmt->execute([$first_name, $last_name, $college, $user['id']]);
+                $stmt = $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, college = ?, bio = ?, research_interests = ?, experience = ?, profile_pic = ? WHERE id = ?");
+                $stmt->execute([$first_name, $last_name, $college, $bio, $research_interests, $experience, $profile_pic, $user['id']]);
             }
 
             // Update session
-        $_SESSION['user']['first_name'] = $first_name;
-        $_SESSION['user']['last_name'] = $last_name;
-        $user = current_user();
+            $_SESSION['user']['first_name'] = $first_name;
+            $_SESSION['user']['last_name'] = $last_name;
+            $_SESSION['user']['profile_pic'] = $profile_pic;
+            $user = current_user();
 
         // If they want to change password
         if (!empty($new_password)) {
@@ -77,6 +122,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$user['id']]);
 $profile = $stmt->fetch();
+
+// If student, fetch current adviser and pending request
+$currentAdviserName = 'None';
+$pendingRequest = null;
+if ($profile['role'] === 'student') {
+    if (!empty($profile['adviser_id'])) {
+        $advStmt = $pdo->prepare("SELECT first_name, last_name FROM users WHERE id = ?");
+        $advStmt->execute([$profile['adviser_id']]);
+        $adv = $advStmt->fetch();
+        if ($adv) $currentAdviserName = 'Dr. ' . $adv['first_name'] . ' ' . $adv['last_name'];
+    }
+
+    $reqStmt = $pdo->prepare("SELECT r.adviser_id, u.first_name, u.last_name FROM adviser_requests r JOIN users u ON r.adviser_id = u.id WHERE r.student_id = ? AND r.status = 'pending' ORDER BY r.created_at DESC LIMIT 1");
+    $reqStmt->execute([$user['id']]);
+    $pendingRequest = $reqStmt->fetch();
+}
 
 // Custom CSS for Profile
 ob_start();
@@ -158,24 +219,39 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <span>Institution</span>
               <span>WMSU</span>
             </li>
+            <?php if ($profile['role'] === 'student'): ?>
+            <li class="account-meta-item" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border);">
+              <span>Adviser</span>
+              <span style="color: var(--crimson);"><?= htmlspecialchars($currentAdviserName) ?></span>
+            </li>
+            <?php endif; ?>
           </ul>
         </div>
       </div>
 
       <!-- Right: Form -->
       <div>
-        <form action="profile.php" method="POST" class="profile-main-card">
+        <form action="profile.php" method="POST" enctype="multipart/form-data" class="profile-main-card">
           
           <h3 class="profile-section-title"><i class="ph-fill ph-user-circle"></i> Personal Information</h3>
+          
+          <div class="form-group">
+            <label class="form-label">Profile Picture</label>
+            <?php if (!empty($profile['profile_pic'])): ?>
+              <img src="<?= BASE_URL ?>public/uploads/avatars/<?= htmlspecialchars($profile['profile_pic']) ?>" alt="Profile Picture" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; display: block; margin-bottom: 0.75rem; border: 3px solid var(--border);">
+            <?php endif; ?>
+            <input type="file" name="profile_pic" class="form-control" accept="image/jpeg,image/png,image/webp">
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Recommended size: 200x200px. Max: 2MB.</span>
+          </div>
           
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">First Name</label>
-              <input type="text" name="first_name" class="form-control" value="<?= htmlspecialchars($profile['first_name']) ?>" required>
+              <input type="text" name="first_name" class="form-control" value="<?= htmlspecialchars($profile['first_name'] ?? '') ?>" required>
             </div>
             <div class="form-group">
               <label class="form-label">Last Name</label>
-              <input type="text" name="last_name" class="form-control" value="<?= htmlspecialchars($profile['last_name']) ?>" required>
+              <input type="text" name="last_name" class="form-control" value="<?= htmlspecialchars($profile['last_name'] ?? '') ?>" required>
             </div>
           </div>
 
@@ -197,6 +273,67 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
               <option value="College of Law" <?= $profile['college'] === 'College of Law' ? 'selected' : '' ?>>College of Law</option>
             </select>
           </div>
+
+          <div class="form-group">
+            <label class="form-label" for="bio">Academic Biography</label>
+            <textarea name="bio" id="bio" class="form-control" rows="4" style="resize:vertical;" placeholder="Tell us about your academic journey and professional background..."><?= htmlspecialchars($profile['bio'] ?? '') ?></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+                <label class="form-label" for="interests">Research Interests</label>
+                <textarea name="research_interests" id="interests" class="form-control" rows="3" style="resize:vertical;" placeholder="e.g. AI, Cybersec, Data Mining..."><?= htmlspecialchars($profile['research_interests'] ?? '') ?></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="experience">Track Record / Experience</label>
+                <textarea name="experience" id="experience" class="form-control" rows="3" style="resize:vertical;" placeholder="Relevant projects, papers, or professional experience..."><?= htmlspecialchars($profile['experience'] ?? '') ?></textarea>
+            </div>
+          </div>
+
+          <?php if (($profile['role'] ?? '') === 'student'): ?>
+          <h3 class="profile-section-title" style="margin-top: 2rem;"><i class="ph-fill ph-student"></i> Student Profile</h3>
+          
+          <div class="form-group">
+            <label class="form-label">Student ID</label>
+            <input type="text" name="student_id" class="form-control" value="<?= htmlspecialchars($profile['student_id'] ?? '') ?>" placeholder="e.g. 2021-00001">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Degree / Course</label>
+              <input type="text" name="course" class="form-control" value="<?= htmlspecialchars($profile['course'] ?? '') ?>" placeholder="e.g. BS Computer Science">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Year Level</label>
+              <select name="year_level" class="form-control">
+                <option value="">Select year</option>
+                <option value="1st Year" <?= $profile['year_level'] === '1st Year' ? 'selected' : '' ?>>1st Year</option>
+                <option value="2nd Year" <?= $profile['year_level'] === '2nd Year' ? 'selected' : '' ?>>2nd Year</option>
+                <option value="3rd Year" <?= $profile['year_level'] === '3rd Year' ? 'selected' : '' ?>>3rd Year</option>
+                <option value="4th Year" <?= $profile['year_level'] === '4th Year' ? 'selected' : '' ?>>4th Year</option>
+                <option value="5th Year" <?= $profile['year_level'] === '5th Year' ? 'selected' : '' ?>>5th Year</option>
+                <option value="Alumni" <?= $profile['year_level'] === 'Alumni' ? 'selected' : '' ?>>Alumni</option>
+              </select>
+            </div>
+          </div>
+          
+          <h3 class="profile-section-title" style="margin-top: 2rem;"><i class="ph-fill ph-chalkboard-teacher"></i> Research Adviser</h3>
+          
+          <?php if ($pendingRequest): ?>
+            <div style="background: #FFFBEB; border: 1px solid #FEF3C7; padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem;">
+              <div style="font-size: 0.8rem; font-weight: 800; color: #92400E; margin-bottom: 0.25rem;">PENDING REQUEST</div>
+              <div style="font-size: 0.9rem; color: #B45309;">You have a pending request to transfer to <strong>Dr. <?= htmlspecialchars($pendingRequest['first_name'] . ' ' . $pendingRequest['last_name']) ?></strong>.</div>
+            </div>
+          <?php endif; ?>
+
+          <div class="form-group">
+            <label class="form-label">Request Adviser Change</label>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">Select a new adviser if you wish to transfer. Your current adviser will remain assigned until the new request is approved.</p>
+            <select name="new_adviser" id="new_adviser" class="form-control">
+              <option value="">Select new adviser</option>
+            </select>
+          </div>
+          <?php endif; ?>
 
           <?php if ($profile['role'] === 'adviser'): ?>
           <h3 class="profile-section-title" style="margin-top: 2rem;"><i class="ph-fill ph-users-three"></i> Adviser Settings</h3>
@@ -231,5 +368,57 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
       </div>
 
     </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const collegeSelect = document.querySelector('select[name="college"]');
+      const adviserSelect = document.getElementById('new_adviser');
+      const currentAdviserId = '<?= $profile['adviser_id'] ?? '' ?>';
+
+      if (collegeSelect && adviserSelect) {
+        collegeSelect.addEventListener('change', function() {
+          const college = this.value;
+          adviserSelect.innerHTML = '<option value="">Loading advisers...</option>';
+          
+          if (!college) {
+            adviserSelect.innerHTML = '<option value="">Select college first to see available advisers</option>';
+            return;
+          }
+
+          fetch(`../api/get_advisers.php?college=${encodeURIComponent(college)}`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.success && data.advisers.length > 0) {
+                adviserSelect.innerHTML = '<option value="">Keep current adviser</option>';
+                data.advisers.forEach(adv => {
+                  if (adv.id.toString() !== currentAdviserId) {
+                    const opt = document.createElement('option');
+                    opt.value = adv.id;
+                    opt.textContent = `Dr. ${adv.name} (${adv.current}/${adv.max} Advisees)`;
+                    if (adv.is_full) {
+                      opt.disabled = true;
+                      opt.textContent += ' - FULL CAPACITY';
+                    }
+                    adviserSelect.appendChild(opt);
+                  }
+                });
+              } else {
+                adviserSelect.innerHTML = '<option value="">No active advisers found in this college</option>';
+              }
+            })
+            .catch(err => {
+              console.error(err);
+              adviserSelect.innerHTML = '<option value="">Error loading advisers</option>';
+            });
+        });
+
+        // Trigger on load to populate the initial list based on current college
+        if (collegeSelect.value) {
+          collegeSelect.dispatchEvent(new Event('change'));
+        }
+      }
+    });
+  </script>
+
 
 <?php require_once __DIR__ . '/../includes/layout_bottom.php'; ?>

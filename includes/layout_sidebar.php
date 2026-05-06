@@ -1,6 +1,7 @@
 <?php
 $role = $user['role'] ?? 'student';
 $current_page = basename($_SERVER['PHP_SELF']);
+$view = $view ?? ($_GET['view'] ?? 'overview');
 ?>
 <!-- ═══════════════════════════════════════════
      APP BODY & SIDEBAR
@@ -22,15 +23,23 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <nav class="sidebar-menu">
       <?php if ($role === 'student'): ?>
         <span class="menu-section-label">Main</span>
-        <a href="<?= BASE_URL ?>student/index.php" class="menu-item <?= ($current_page == 'index.php') ? 'active' : '' ?>">
+        <a href="<?= BASE_URL ?>student/index.php" class="menu-item <?= ($current_page == 'index.php' && ($_GET['view'] ?? '') !== 'submissions') ? 'active' : '' ?>">
           <i class="ph-fill ph-squares-four"></i> Dashboard
         </a>
-        <a href="<?= BASE_URL ?>student/index.php?view=submissions" class="menu-item <?= (($view ?? '') == 'submissions') ? 'active' : '' ?>">
+        <a href="<?= BASE_URL ?>student/index.php?view=submissions" class="menu-item <?= (($_GET['view'] ?? '') === 'submissions') ? 'active' : '' ?>">
           <i class="ph-fill ph-file-text"></i> My Submissions
         </a>
         <a href="<?= BASE_URL ?>student/tracker.php" class="menu-item <?= ($current_page == 'tracker.php') ? 'active' : '' ?>">
           <i class="ph-fill ph-map-pin-line"></i> Tracker
         </a>
+        <a href="<?= BASE_URL ?>student/advisers.php" class="menu-item <?= ($current_page == 'advisers.php') ? 'active' : '' ?>">
+          <i class="ph-fill ph-graduation-cap"></i> Mentorship
+        </a>
+        <?php if ($current_page == 'resubmit.php'): ?>
+          <a href="#" class="menu-item active">
+            <i class="ph-fill ph-arrow-counter-clockwise"></i> Upload Revision
+          </a>
+        <?php endif; ?>
 
       <?php elseif ($role === 'adviser'): ?>
         <span class="menu-section-label">Main</span>
@@ -58,10 +67,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <div class="sidebar-bottom">
       <?php if ($role === 'student'): ?>
-        <a href="<?= BASE_URL ?>student/upload.php?new=1" class="btn btn-primary" style="width:100%; justify-content:center; padding: 0.65rem; font-size:0.8rem; margin-bottom: 0.75rem;">
-          <i class="ph-bold ph-upload-simple"></i> Upload Thesis
-        </a>
-
+        <!-- Upload button removed to reduce redundancy -->
       <?php endif; ?>
       
       <div class="sidebar-bottom-links">

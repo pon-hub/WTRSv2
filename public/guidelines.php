@@ -150,10 +150,10 @@ require_once __DIR__ . '/../includes/session.php';
                     <div class="guide-icon"><i class="ph-bold ph-file-pdf"></i></div>
                     <h3>Manuscript Standards</h3>
                     <ul class="guide-list">
-                        <li>Submissions must be in standard PDF format (Max 20MB).</li>
-                        <li>Original manuscripts should include an abstract (300 words max).</li>
-                        <li>Consistency with the department's authorized formatting guide.</li>
-                        <li>Keywords must be provided to facilitate archival discovery.</li>
+                        <li>Submissions must be in standard PDF format (Maximum file size: 20MB).</li>
+                        <li>Original manuscripts must include a clear and concise abstract.</li>
+                        <li>Follow your department's specific formatting and citation guidelines.</li>
+                        <li>Ensure all group members' names are listed for collaborative projects.</li>
                     </ul>
                 </article>
 

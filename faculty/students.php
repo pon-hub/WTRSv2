@@ -45,7 +45,7 @@ $stmt = $pdo->prepare("
     LEFT JOIN adviser_requests ar ON ar.student_id = u.id AND ar.adviser_id = u.adviser_id AND ar.status = 'approved'
     WHERE u.role = 'student' AND u.adviser_id = :adviser_id
     $searchClause
-    GROUP BY u.id, u.first_name, u.last_name, u.college, u.email
+    GROUP BY u.id, u.first_name, u.last_name, u.college, u.course, u.year_level, u.email
     ORDER BY last_activity DESC
 ");
 $stmt->execute($params);
@@ -150,6 +150,11 @@ require_once __DIR__ . '/../includes/layout_sidebar.php';
                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
                      <?= htmlspecialchars($s['college']) ?> 
                    </div>
+                   <?php if (!empty($s['course'])): ?>
+                     <div style="font-size: 0.72rem; color: var(--text-mid); font-weight: 700; margin-top: 0.2rem;">
+                       <?= htmlspecialchars($s['course']) ?> &bull; <?= htmlspecialchars($s['year_level'] ?? 'N/A') ?>
+                     </div>
+                   <?php endif; ?>
                 </td>
                 <td>
                    <div style="font-weight: 800; font-size: 1rem; color: var(--text-dark);"><?= (int)$s['submission_count'] ?> Total</div>
